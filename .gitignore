@@ -1,0 +1,30 @@
+# Environnement virtuel Python
+.venv/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code
+.vscode/
+
+# Bases SQLite locales
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Sauvegardes et fichiers générés
+backups/*
+exports/*
+receipts/*
+reports/*
+
+# Construction future de l'application
+build/
+dist/
+*.spec
+
+# Fichiers temporaires Windows
+Thumbs.db
+Desktop.ini
