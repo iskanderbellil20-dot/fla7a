@@ -87,8 +87,101 @@ MIGRATIONS = [
         );
         """
     ),
-]
+    (
+        2,
+        """
+        CREATE TABLE tours_eau (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
 
+            numero_recu INTEGER NOT NULL UNIQUE,
+
+            parcelle_id INTEGER NOT NULL,
+            ressource_id INTEGER NOT NULL,
+
+            date_heure_debut TEXT NOT NULL,
+            date_heure_fin TEXT NOT NULL,
+
+            duree_minutes INTEGER NOT NULL
+                CHECK (duree_minutes > 0),
+
+            statut TEXT NOT NULL DEFAULT 'PLANIFIE'
+                CHECK (
+                    statut IN (
+                        'PLANIFIE',
+                        'TERMINE',
+                        'ANNULE',
+                        'REPORTE',
+                        'INTERROMPU'
+                    )
+                ),
+
+            remarque TEXT,
+
+            date_creation TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            date_modification TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (parcelle_id)
+                REFERENCES parcelles(id)
+                ON UPDATE CASCADE
+                ON DELETE RESTRICT,
+
+            FOREIGN KEY (ressource_id)
+                REFERENCES ressources_eau(id)
+                ON UPDATE CASCADE
+                ON DELETE RESTRICT
+        );
+
+
+        CREATE TABLE indisponibilites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            ressource_id INTEGER NOT NULL,
+
+            type TEXT NOT NULL
+                CHECK (
+                    type IN (
+                        'PANNE',
+                        'MAINTENANCE',
+                        'AUTRE'
+                    )
+                ),
+
+            date_heure_debut TEXT NOT NULL,
+            date_heure_fin TEXT,
+
+            motif TEXT,
+            remarque TEXT,
+
+            date_creation TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (ressource_id)
+                REFERENCES ressources_eau(id)
+                ON UPDATE CASCADE
+                ON DELETE RESTRICT
+        );
+
+
+        CREATE INDEX idx_tours_eau_ressource_dates
+        ON tours_eau (
+            ressource_id,
+            date_heure_debut,
+            date_heure_fin
+        );
+
+
+        CREATE INDEX idx_tours_eau_parcelle
+        ON tours_eau (parcelle_id);
+
+
+        CREATE INDEX idx_indisponibilites_ressource_dates
+        ON indisponibilites (
+            ressource_id,
+            date_heure_debut,
+            date_heure_fin
+        );
+        """
+    ),
+]
 
 def create_migrations_table(connection):
     connection.execute(
