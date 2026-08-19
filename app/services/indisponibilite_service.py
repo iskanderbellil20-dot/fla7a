@@ -321,3 +321,115 @@ def lister_indisponibilites(
 
     finally:
         connection.close()
+
+def rechercher_tours_impactes(
+    ressource_id,
+    date_heure_debut,
+    date_heure_fin=None,
+):
+    debut = convertir_date(
+        date_heure_debut,
+        "La date/heure de début",
+    )
+
+    fin = convertir_date(
+        date_heure_fin,
+        "La date/heure de fin",
+    )
+
+    connection = get_connection()
+
+    try:
+        query = """
+            SELECT
+                t.id,
+                t.numero_recu,
+
+                t.date_heure_debut,
+                t.date_heure_fin,
+                t.duree_minutes,
+
+                p.id,
+                p.numero_lot,
+                p.superficie_m2,
+
+                a.id,
+                a.nom,
+                a.prenom,
+                a.cin,
+                a.telephone,
+
+                r.id,
+                r.nom
+
+            FROM tours_eau t
+
+            INNER JOIN parcelles p
+                ON p.id = t.parcelle_id
+
+            INNER JOIN agriculteurs a
+                ON a.id = p.agriculteur_id
+
+            INNER JOIN ressources_eau r
+                ON r.id = t.ressource_id
+
+            WHERE t.ressource_id = ?
+              AND t.statut = 'PLANIFIE'
+              AND t.date_heure_fin > ?
+        """
+
+        params = [
+            ressource_id,
+            debut.strftime(FORMAT_DB),
+        ]
+
+        if fin is not None:
+            query += """
+                AND t.date_heure_debut < ?
+            """
+            params.append(
+                fin.strftime(FORMAT_DB)
+            )
+
+        query += """
+            ORDER BY t.date_heure_debut
+        """
+
+        rows = connection.execute(
+            query,
+            params,
+        ).fetchall()
+
+        resultat = []
+
+        for row in rows:
+            resultat.append(
+                {
+                    "tour_id": row[0],
+                    "numero_recu": row[1],
+                    "numero_recu_formate":
+                        f"{row[1]:06d}",
+
+                    "date_heure_debut": row[2],
+                    "date_heure_fin": row[3],
+                    "duree_minutes": row[4],
+
+                    "parcelle_id": row[5],
+                    "numero_lot": row[6],
+                    "superficie_m2": row[7],
+
+                    "agriculteur_id": row[8],
+                    "nom": row[9],
+                    "prenom": row[10],
+                    "cin": row[11],
+                    "telephone": row[12],
+
+                    "ressource_id": row[13],
+                    "ressource_nom": row[14],
+                }
+            )
+
+        return resultat
+
+    finally:
+        connection.close()

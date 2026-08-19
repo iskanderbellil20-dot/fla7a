@@ -182,8 +182,8 @@ MIGRATIONS = [
         """
 
     ),
-    (
-            
+    
+        (
         3,
         """
         CREATE TABLE historique (
@@ -211,7 +211,21 @@ MIGRATIONS = [
             date_action
         );
         """
-    
+    ),
+
+    (
+        4,
+        """
+        ALTER TABLE tours_eau
+        ADD COLUMN tour_origine_id INTEGER
+            REFERENCES tours_eau(id)
+            ON UPDATE CASCADE
+            ON DELETE RESTRICT;
+
+
+        CREATE INDEX idx_tours_eau_origine
+        ON tours_eau (tour_origine_id);
+        """
     ),
 ]
 

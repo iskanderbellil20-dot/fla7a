@@ -4,6 +4,9 @@ from app.services.historique_service import enregistrer_historique
 from app.database.connection import get_connection
 
 
+
+
+
 FORMAT_DB = "%Y-%m-%d %H:%M:%S"
 
 STATUTS_BLOQUANTS = (
@@ -634,6 +637,175 @@ def modifier_tour_eau(
         )
 
         connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+def reporter_tour_eau(
+    tour_id,
+    nouvelle_ressource_id,
+    nouvelle_date_heure_debut,
+    nouvelle_duree_minutes,
+    motif=None,
+    remarque=None,
+):
+    debut, fin, duree_minutes = calculer_fin(
+        nouvelle_date_heure_debut,
+        nouvelle_duree_minutes,
+    )
+
+    connection = get_connection()
+
+    try:
+        ancien_row = connection.execute(
+            """
+            SELECT
+                id,
+                numero_recu,
+                parcelle_id,
+                ressource_id,
+                date_heure_debut,
+                date_heure_fin,
+                duree_minutes,
+                statut,
+                remarque
+            FROM tours_eau
+            WHERE id = ?
+            """,
+            (tour_id,),
+        ).fetchone()
+
+        if ancien_row is None:
+            raise ValueError(
+                "Tour d'eau introuvable."
+            )
+
+        if ancien_row[7] != "PLANIFIE":
+            raise ValueError(
+                "Seul un tour planifié peut être reporté."
+            )
+
+        parcelle_id = ancien_row[2]
+
+        verifier_parcelle_et_ressource(
+            connection,
+            parcelle_id,
+            nouvelle_ressource_id,
+        )
+
+        verifier_indisponibilite(
+            connection,
+            nouvelle_ressource_id,
+            debut,
+            fin,
+        )
+
+        conflit = rechercher_conflit(
+            connection,
+            nouvelle_ressource_id,
+            debut,
+            fin,
+            exclure_tour_id=tour_id,
+        )
+
+        if conflit is not None:
+            raise ValueError(
+                "Impossible de reporter ce tour : "
+                "le nouveau créneau est déjà occupé."
+            )
+
+        nouveau_numero_recu = obtenir_prochain_numero_recu(
+            connection
+        )
+
+        cursor = connection.execute(
+            """
+            INSERT INTO tours_eau (
+                numero_recu,
+                parcelle_id,
+                ressource_id,
+                date_heure_debut,
+                date_heure_fin,
+                duree_minutes,
+                statut,
+                remarque,
+                tour_origine_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'PLANIFIE', ?, ?)
+            """,
+            (
+                nouveau_numero_recu,
+                parcelle_id,
+                nouvelle_ressource_id,
+                debut.strftime(FORMAT_DB),
+                fin.strftime(FORMAT_DB),
+                duree_minutes,
+                remarque,
+                tour_id,
+            ),
+        )
+
+        nouveau_tour_id = cursor.lastrowid
+
+        connection.execute(
+            """
+            UPDATE tours_eau
+            SET
+                statut = 'REPORTE',
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (tour_id,),
+        )
+
+        ancien = {
+            "numero_recu": ancien_row[1],
+            "parcelle_id": ancien_row[2],
+            "ressource_id": ancien_row[3],
+            "date_heure_debut": ancien_row[4],
+            "date_heure_fin": ancien_row[5],
+            "duree_minutes": ancien_row[6],
+            "statut": ancien_row[7],
+            "remarque": ancien_row[8],
+        }
+
+        nouveau = {
+            "tour_id": nouveau_tour_id,
+            "numero_recu": nouveau_numero_recu,
+            "parcelle_id": parcelle_id,
+            "ressource_id": nouvelle_ressource_id,
+            "date_heure_debut": debut.strftime(FORMAT_DB),
+            "date_heure_fin": fin.strftime(FORMAT_DB),
+            "duree_minutes": duree_minutes,
+            "statut": "PLANIFIE",
+            "remarque": remarque,
+            "tour_origine_id": tour_id,
+        }
+
+        enregistrer_historique(
+            connection=connection,
+            type_objet="TOUR_EAU",
+            objet_id=tour_id,
+            action="REPORT",
+            ancienne_valeur=ancien,
+            nouvelle_valeur=nouveau,
+            motif=motif,
+        )
+
+        connection.commit()
+
+        return {
+            "ancien_tour_id": tour_id,
+            "ancien_numero_recu": ancien_row[1],
+            "nouveau_tour_id": nouveau_tour_id,
+            "nouveau_numero_recu": nouveau_numero_recu,
+            "nouveau_numero_recu_formate":
+                f"{nouveau_numero_recu:06d}",
+        }
 
     except Exception:
         connection.rollback()
