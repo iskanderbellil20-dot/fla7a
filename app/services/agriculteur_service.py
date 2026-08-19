@@ -403,3 +403,451 @@ def archiver_agriculteur(agriculteur_id):
 
     finally:
         connection.close()
+def modifier_agriculteur(
+    agriculteur_id,
+    nom,
+    prenom,
+    cin,
+    telephone,
+    remarque=None,
+):
+    nom, prenom, cin, telephone = valider_agriculteur(
+        nom,
+        prenom,
+        cin,
+        telephone,
+    )
+
+    connection = get_connection()
+
+    try:
+        cursor = connection.execute(
+            """
+            UPDATE agriculteurs
+            SET
+                nom = ?,
+                prenom = ?,
+                cin = ?,
+                telephone = ?,
+                remarque = ?,
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND actif = 1
+            """,
+            (
+                nom,
+                prenom,
+                cin,
+                telephone,
+                remarque,
+                agriculteur_id,
+            ),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(
+                "Agriculteur introuvable ou archivé."
+            )
+
+        connection.commit()
+
+    except sqlite3.IntegrityError as error:
+        connection.rollback()
+
+        if "agriculteurs.cin" in str(error):
+            raise ValueError(
+                "Un autre agriculteur possède déjà ce CIN."
+            ) from error
+
+        raise
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+def ajouter_parcelle(
+    agriculteur_id,
+    numero_lot,
+    superficie_m2,
+    ressources_ids,
+    remarque=None,
+):
+    numero_lot = str(numero_lot).strip()
+
+    if not numero_lot:
+        raise ValueError(
+            "Le numéro du lot est obligatoire."
+        )
+
+    try:
+        superficie_m2 = float(superficie_m2)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "La superficie est invalide."
+        )
+
+    if superficie_m2 <= 0:
+        raise ValueError(
+            "La superficie doit être supérieure à 0."
+        )
+
+    if not ressources_ids:
+        raise ValueError(
+            "La parcelle doit avoir au moins une ressource d'eau."
+        )
+
+    connection = get_connection()
+
+    try:
+        agriculteur = connection.execute(
+            """
+            SELECT id
+            FROM agriculteurs
+            WHERE id = ?
+              AND actif = 1
+            """,
+            (agriculteur_id,),
+        ).fetchone()
+
+        if agriculteur is None:
+            raise ValueError(
+                "Agriculteur introuvable ou archivé."
+            )
+
+        verifier_ressources(
+            connection,
+            ressources_ids,
+        )
+
+        cursor = connection.execute(
+            """
+            INSERT INTO parcelles (
+                agriculteur_id,
+                numero_lot,
+                superficie_m2,
+                remarque
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                agriculteur_id,
+                numero_lot,
+                superficie_m2,
+                remarque,
+            ),
+        )
+
+        parcelle_id = cursor.lastrowid
+
+        for ressource_id in set(ressources_ids):
+            connection.execute(
+                """
+                INSERT INTO parcelles_ressources (
+                    parcelle_id,
+                    ressource_id
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    parcelle_id,
+                    ressource_id,
+                ),
+            )
+
+        connection.commit()
+
+        return parcelle_id
+
+    except sqlite3.IntegrityError as error:
+        connection.rollback()
+
+        if "parcelles.numero_lot" in str(error):
+            raise ValueError(
+                "Un lot avec ce numéro existe déjà."
+            ) from error
+
+        raise
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+def modifier_parcelle(
+    parcelle_id,
+    numero_lot,
+    superficie_m2,
+    ressources_ids,
+    remarque=None,
+):
+    numero_lot = str(numero_lot).strip()
+
+    if not numero_lot:
+        raise ValueError(
+            "Le numéro du lot est obligatoire."
+        )
+
+    try:
+        superficie_m2 = float(superficie_m2)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "La superficie est invalide."
+        )
+
+    if superficie_m2 <= 0:
+        raise ValueError(
+            "La superficie doit être supérieure à 0."
+        )
+
+    if not ressources_ids:
+        raise ValueError(
+            "La parcelle doit avoir au moins une ressource d'eau."
+        )
+
+    connection = get_connection()
+
+    try:
+        parcelle = connection.execute(
+            """
+            SELECT id
+            FROM parcelles
+            WHERE id = ?
+              AND actif = 1
+            """,
+            (parcelle_id,),
+        ).fetchone()
+
+        if parcelle is None:
+            raise ValueError(
+                "Parcelle introuvable ou archivée."
+            )
+
+        verifier_ressources(
+            connection,
+            ressources_ids,
+        )
+
+        connection.execute(
+            """
+            UPDATE parcelles
+            SET
+                numero_lot = ?,
+                superficie_m2 = ?,
+                remarque = ?,
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                numero_lot,
+                superficie_m2,
+                remarque,
+                parcelle_id,
+            ),
+        )
+
+        # On remplace les anciennes ressources autorisées
+        # par la nouvelle sélection du responsable.
+        connection.execute(
+            """
+            DELETE FROM parcelles_ressources
+            WHERE parcelle_id = ?
+            """,
+            (parcelle_id,),
+        )
+
+        for ressource_id in set(ressources_ids):
+            connection.execute(
+                """
+                INSERT INTO parcelles_ressources (
+                    parcelle_id,
+                    ressource_id
+                )
+                VALUES (?, ?)
+                """,
+                (
+                    parcelle_id,
+                    ressource_id,
+                ),
+            )
+
+        connection.commit()
+
+    except sqlite3.IntegrityError as error:
+        connection.rollback()
+
+        if "parcelles.numero_lot" in str(error):
+            raise ValueError(
+                "Un autre lot possède déjà ce numéro."
+            ) from error
+
+        raise
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+def archiver_parcelle(parcelle_id):
+    connection = get_connection()
+
+    try:
+        cursor = connection.execute(
+            """
+            UPDATE parcelles
+            SET
+                actif = 0,
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND actif = 1
+            """,
+            (parcelle_id,),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(
+                "Parcelle introuvable ou déjà archivée."
+            )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+def restaurer_parcelle(parcelle_id):
+    connection = get_connection()
+
+    try:
+        parcelle = connection.execute(
+            """
+            SELECT
+                p.id,
+                p.agriculteur_id,
+                a.actif
+            FROM parcelles p
+            INNER JOIN agriculteurs a
+                ON a.id = p.agriculteur_id
+            WHERE p.id = ?
+              AND p.actif = 0
+            """,
+            (parcelle_id,),
+        ).fetchone()
+
+        if parcelle is None:
+            raise ValueError(
+                "Parcelle introuvable ou déjà active."
+            )
+
+        if parcelle[2] == 0:
+            raise ValueError(
+                "Impossible de restaurer cette parcelle : "
+                "l'agriculteur est archivé."
+            )
+
+        connection.execute(
+            """
+            UPDATE parcelles
+            SET
+                actif = 1,
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (parcelle_id,),
+        )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+def restaurer_agriculteur(agriculteur_id):
+    connection = get_connection()
+
+    try:
+        cursor = connection.execute(
+            """
+            UPDATE agriculteurs
+            SET
+                actif = 1,
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND actif = 0
+            """,
+            (agriculteur_id,),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(
+                "Agriculteur introuvable ou déjà actif."
+            )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+def rechercher_agriculteurs(terme):
+    terme = str(terme).strip()
+
+    if not terme:
+        return []
+
+    recherche = f"%{terme}%"
+
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT
+                a.id,
+                a.nom,
+                a.prenom,
+                a.cin,
+                a.telephone
+            FROM agriculteurs a
+
+            LEFT JOIN parcelles p
+                ON p.agriculteur_id = a.id
+               AND p.actif = 1
+
+            WHERE a.actif = 1
+              AND (
+                    a.cin LIKE ?
+                    OR a.nom LIKE ?
+                    OR a.prenom LIKE ?
+                    OR p.numero_lot LIKE ?
+              )
+
+            ORDER BY
+                a.nom,
+                a.prenom
+            """,
+            (
+                recherche,
+                recherche,
+                recherche,
+                recherche,
+            ),
+        ).fetchall()
+
+        return rows
+
+    finally:
+        connection.close()
