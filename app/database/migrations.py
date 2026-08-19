@@ -180,6 +180,38 @@ MIGRATIONS = [
             date_heure_fin
         );
         """
+
+    ),
+    (
+            
+        3,
+        """
+        CREATE TABLE historique (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            type_objet TEXT NOT NULL,
+
+            objet_id INTEGER NOT NULL,
+
+            action TEXT NOT NULL,
+
+            ancienne_valeur TEXT,
+            nouvelle_valeur TEXT,
+
+            motif TEXT,
+
+            date_action TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+
+        CREATE INDEX idx_historique_objet
+        ON historique (
+            type_objet,
+            objet_id,
+            date_action
+        );
+        """
+    
     ),
 ]
 

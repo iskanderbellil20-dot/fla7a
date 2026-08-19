@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime, timedelta
-
+from app.services.historique_service import enregistrer_historique
 from app.database.connection import get_connection
 
 
@@ -343,6 +343,297 @@ def creer_tour_eau(
         raise ValueError(
             "Impossible d'enregistrer le tour d'eau."
         ) from error
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+
+
+def obtenir_tour_eau(tour_id):
+    connection = get_connection()
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                t.id,
+                t.numero_recu,
+                t.parcelle_id,
+                p.numero_lot,
+                p.superficie_m2,
+                a.id,
+                a.nom,
+                a.prenom,
+                a.cin,
+                a.telephone,
+                t.ressource_id,
+                r.nom,
+                t.date_heure_debut,
+                t.date_heure_fin,
+                t.duree_minutes,
+                t.statut,
+                t.remarque,
+                t.date_creation,
+                t.date_modification
+            FROM tours_eau t
+
+            INNER JOIN parcelles p
+                ON p.id = t.parcelle_id
+
+            INNER JOIN agriculteurs a
+                ON a.id = p.agriculteur_id
+
+            INNER JOIN ressources_eau r
+                ON r.id = t.ressource_id
+
+            WHERE t.id = ?
+            """,
+            (tour_id,),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "id": row[0],
+            "numero_recu": row[1],
+            "numero_recu_formate": f"{row[1]:06d}",
+            "parcelle_id": row[2],
+            "numero_lot": row[3],
+            "superficie_m2": row[4],
+            "agriculteur_id": row[5],
+            "nom": row[6],
+            "prenom": row[7],
+            "cin": row[8],
+            "telephone": row[9],
+            "ressource_id": row[10],
+            "ressource_nom": row[11],
+            "date_heure_debut": row[12],
+            "date_heure_fin": row[13],
+            "duree_minutes": row[14],
+            "statut": row[15],
+            "remarque": row[16],
+            "date_creation": row[17],
+            "date_modification": row[18],
+        }
+
+    finally:
+        connection.close()
+
+def annuler_tour_eau(
+    tour_id,
+    motif=None,
+):
+    connection = get_connection()
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                id,
+                numero_recu,
+                statut,
+                date_heure_debut,
+                date_heure_fin,
+                ressource_id,
+                parcelle_id,
+                remarque
+            FROM tours_eau
+            WHERE id = ?
+            """,
+            (tour_id,),
+        ).fetchone()
+
+        if row is None:
+            raise ValueError(
+                "Tour d'eau introuvable."
+            )
+
+        if row[2] == "ANNULE":
+            raise ValueError(
+                "Ce tour est déjà annulé."
+            )
+
+        if row[2] == "REPORTE":
+            raise ValueError(
+                "Ce tour a déjà été reporté."
+            )
+
+        ancien = {
+            "numero_recu": row[1],
+            "statut": row[2],
+            "date_heure_debut": row[3],
+            "date_heure_fin": row[4],
+            "ressource_id": row[5],
+            "parcelle_id": row[6],
+            "remarque": row[7],
+        }
+
+        connection.execute(
+            """
+            UPDATE tours_eau
+            SET
+                statut = 'ANNULE',
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (tour_id,),
+        )
+
+        nouveau = ancien.copy()
+        nouveau["statut"] = "ANNULE"
+
+        enregistrer_historique(
+            connection=connection,
+            type_objet="TOUR_EAU",
+            objet_id=tour_id,
+            action="ANNULATION",
+            ancienne_valeur=ancien,
+            nouvelle_valeur=nouveau,
+            motif=motif,
+        )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+def modifier_tour_eau(
+    tour_id,
+    parcelle_id,
+    ressource_id,
+    date_heure_debut,
+    duree_minutes,
+    remarque=None,
+    motif=None,
+):
+    debut, fin, duree_minutes = calculer_fin(
+        date_heure_debut,
+        duree_minutes,
+    )
+
+    connection = get_connection()
+
+    try:
+        ancien_row = connection.execute(
+            """
+            SELECT
+                numero_recu,
+                parcelle_id,
+                ressource_id,
+                date_heure_debut,
+                date_heure_fin,
+                duree_minutes,
+                statut,
+                remarque
+            FROM tours_eau
+            WHERE id = ?
+            """,
+            (tour_id,),
+        ).fetchone()
+
+        if ancien_row is None:
+            raise ValueError(
+                "Tour d'eau introuvable."
+            )
+
+        if ancien_row[6] != "PLANIFIE":
+            raise ValueError(
+                "Seul un tour planifié peut être modifié."
+            )
+
+        verifier_parcelle_et_ressource(
+            connection,
+            parcelle_id,
+            ressource_id,
+        )
+
+        verifier_indisponibilite(
+            connection,
+            ressource_id,
+            debut,
+            fin,
+        )
+
+        conflit = rechercher_conflit(
+            connection,
+            ressource_id,
+            debut,
+            fin,
+            exclure_tour_id=tour_id,
+        )
+
+        if conflit is not None:
+            raise ValueError(
+                "Impossible de modifier ce tour : "
+                "le nouveau créneau est déjà occupé."
+            )
+
+        ancien = {
+            "numero_recu": ancien_row[0],
+            "parcelle_id": ancien_row[1],
+            "ressource_id": ancien_row[2],
+            "date_heure_debut": ancien_row[3],
+            "date_heure_fin": ancien_row[4],
+            "duree_minutes": ancien_row[5],
+            "statut": ancien_row[6],
+            "remarque": ancien_row[7],
+        }
+
+        connection.execute(
+            """
+            UPDATE tours_eau
+            SET
+                parcelle_id = ?,
+                ressource_id = ?,
+                date_heure_debut = ?,
+                date_heure_fin = ?,
+                duree_minutes = ?,
+                remarque = ?,
+                date_modification = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                parcelle_id,
+                ressource_id,
+                debut.strftime(FORMAT_DB),
+                fin.strftime(FORMAT_DB),
+                duree_minutes,
+                remarque,
+                tour_id,
+            ),
+        )
+
+        nouveau = {
+            "numero_recu": ancien_row[0],
+            "parcelle_id": parcelle_id,
+            "ressource_id": ressource_id,
+            "date_heure_debut": debut.strftime(FORMAT_DB),
+            "date_heure_fin": fin.strftime(FORMAT_DB),
+            "duree_minutes": duree_minutes,
+            "statut": "PLANIFIE",
+            "remarque": remarque,
+        }
+
+        enregistrer_historique(
+            connection=connection,
+            type_objet="TOUR_EAU",
+            objet_id=tour_id,
+            action="MODIFICATION",
+            ancienne_valeur=ancien,
+            nouvelle_valeur=nouveau,
+            motif=motif,
+        )
+
+        connection.commit()
 
     except Exception:
         connection.rollback()
