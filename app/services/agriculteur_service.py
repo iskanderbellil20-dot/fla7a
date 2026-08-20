@@ -222,7 +222,7 @@ def creer_agriculteur(
 
         if "parcelles.numero_lot" in message:
             raise ValueError(
-                "Un lot avec ce numéro existe déjà."
+                "Une parcelle active avec ce numéro de lot existe déjà."
             ) from error
 
         raise
@@ -566,7 +566,7 @@ def ajouter_parcelle(
 
         if "parcelles.numero_lot" in str(error):
             raise ValueError(
-                "Un lot avec ce numéro existe déjà."
+                "Une parcelle active avec ce numéro de lot existe déjà."
             ) from error
 
         raise
@@ -681,7 +681,7 @@ def modifier_parcelle(
 
         if "parcelles.numero_lot" in str(error):
             raise ValueError(
-                "Un autre lot possède déjà ce numéro."
+                "Une autre parcelle active possède déjà ce numéro de lot."
             ) from error
 
         raise
