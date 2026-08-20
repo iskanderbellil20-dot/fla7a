@@ -227,6 +227,99 @@ MIGRATIONS = [
         ON tours_eau (tour_origine_id);
         """
     ),
+
+    (
+        5,
+        """
+        CREATE TABLE parcelles_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            agriculteur_id INTEGER NOT NULL,
+
+            numero_lot TEXT NOT NULL,
+
+            superficie_m2 REAL NOT NULL
+                CHECK (superficie_m2 > 0),
+
+            remarque TEXT,
+
+            actif INTEGER NOT NULL DEFAULT 1
+                CHECK (actif IN (0, 1)),
+
+            date_creation TEXT NOT NULL
+                DEFAULT CURRENT_TIMESTAMP,
+
+            date_modification TEXT NOT NULL
+                DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (agriculteur_id)
+                REFERENCES agriculteurs(id)
+                ON UPDATE CASCADE
+                ON DELETE RESTRICT
+        );
+
+
+        INSERT INTO parcelles_new (
+            id,
+            agriculteur_id,
+            numero_lot,
+            superficie_m2,
+            remarque,
+            actif,
+            date_creation,
+            date_modification
+        )
+        SELECT
+            id,
+            agriculteur_id,
+            numero_lot,
+            superficie_m2,
+            remarque,
+            actif,
+            date_creation,
+            date_modification
+        FROM parcelles;
+
+
+        DROP INDEX IF EXISTS idx_parcelle_lot_actif_unique;
+        DROP INDEX IF EXISTS idx_parcelles_agriculteur;
+
+
+        CREATE UNIQUE INDEX idx_parcelle_lot_actif_unique_new
+        ON parcelles_new (numero_lot)
+        WHERE actif = 1;
+
+
+        CREATE INDEX idx_parcelles_agriculteur_new
+        ON parcelles_new (agriculteur_id);
+
+
+        PRAGMA foreign_keys = OFF;
+
+
+        DROP TABLE parcelles;
+
+
+        ALTER TABLE parcelles_new
+        RENAME TO parcelles;
+
+
+        PRAGMA foreign_keys = ON;
+
+
+        DROP INDEX IF EXISTS idx_parcelle_lot_actif_unique_new;
+        DROP INDEX IF EXISTS idx_parcelles_agriculteur_new;
+
+
+        CREATE UNIQUE INDEX idx_parcelle_lot_actif_unique
+        ON parcelles (numero_lot)
+        WHERE actif = 1;
+
+
+        CREATE INDEX idx_parcelles_agriculteur
+        ON parcelles (agriculteur_id);
+        """
+    ),
 ]
 
 def create_migrations_table(connection):
@@ -262,6 +355,19 @@ def run_migrations():
                 continue
 
             print(f"Application de la migration {version}...")
+
+            if version == 5:
+                connection.commit()
+                connection.execute(
+                    "PRAGMA foreign_keys = OFF"
+                )
+
+            connection.executescript(sql)
+
+            if version == 5:
+                connection.execute(
+                    "PRAGMA foreign_keys = ON"
+                )    
 
             connection.executescript(sql)
 
