@@ -13,7 +13,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
+from app.ui.dialogs.agriculteur_dialog import (
+    AgriculteurDialog,
+)
 from app.services.agriculteur_service import (
     archiver_agriculteur,
     lister_agriculteurs_avec_resume,
@@ -28,6 +30,46 @@ from app.ui.dialogs.agriculteur_details_dialog import (
 
 
 class AgriculteursPage(QWidget):
+
+    def modifier_agriculteur_selectionne(self):
+        agriculteur_id = (
+            self.obtenir_id_selectionne()
+        )
+
+        if agriculteur_id is None:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez un agriculteur.",
+            )
+            return
+
+        agriculteur = obtenir_agriculteur(
+            agriculteur_id
+        )
+
+        if agriculteur is None:
+            return
+
+        if agriculteur["actif"] == 0:
+            QMessageBox.information(
+                self,
+                "Agriculteur archivé",
+                (
+                    "Restaurez l'agriculteur "
+                    "avant de le modifier."
+                ),
+            )
+            return
+
+        dialog = AgriculteurDialog(
+            parent=self,
+            agriculteur_id=agriculteur_id,
+        )
+
+        if dialog.exec():
+            self.charger_agriculteurs()
+
     def __init__(self):
         super().__init__()
 
@@ -95,7 +137,7 @@ class AgriculteursPage(QWidget):
 
         # On connectera ce bouton à l'étape suivante.
         self.ajouter_button.clicked.connect(
-            self.creation_pas_encore_disponible
+            self.ajouter_agriculteur
         )
 
         barre.addWidget(
@@ -173,6 +215,13 @@ class AgriculteursPage(QWidget):
         fiche_button = QPushButton(
             "Voir la fiche"
         )
+        modifier_button = QPushButton(
+            "Modifier"
+        )
+
+        modifier_button.clicked.connect(
+            self.modifier_agriculteur_selectionne
+        )
 
         fiche_button.clicked.connect(
             self.ouvrir_fiche
@@ -193,7 +242,8 @@ class AgriculteursPage(QWidget):
         actualiser_button.clicked.connect(
             self.charger_agriculteurs
         )
-
+        
+        actions.addWidget(modifier_button)
         actions.addWidget(fiche_button)
         actions.addWidget(self.archive_button)
         actions.addWidget(actualiser_button)
@@ -450,13 +500,12 @@ class AgriculteursPage(QWidget):
             self.archive_button.setText(
                 "Restaurer"
             )
-
-    def creation_pas_encore_disponible(self):
-        QMessageBox.information(
-            self,
-            "Création d'un agriculteur",
-            (
-                "Le formulaire de création "
-                "sera ajouté à l'étape suivante."
-            ),
+            
+    def ajouter_agriculteur(self):
+        dialog = AgriculteurDialog(
+            parent=self
         )
+
+        if dialog.exec():
+            self.charger_agriculteurs()
+    
