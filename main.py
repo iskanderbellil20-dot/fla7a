@@ -1,17 +1,23 @@
 import sys
 
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
+
+from app.database.migrations import run_migrations
+from app.ui.main_window import MainWindow
+from app.ui.styles import APP_STYLE
 
 
 def main():
-    app = QApplication(sys.argv)
+    run_migrations()
 
-    window = QLabel("Gestion des ressources d'eau")
-    window.setWindowTitle("Gestion Eau")
-    window.resize(500, 150)
+    application = QApplication(sys.argv)
+
+    application.setStyleSheet(APP_STYLE)
+
+    window = MainWindow()
     window.show()
 
-    sys.exit(app.exec())
+    sys.exit(application.exec())
 
 
 if __name__ == "__main__":
