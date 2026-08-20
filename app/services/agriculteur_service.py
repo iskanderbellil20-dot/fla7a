@@ -851,3 +851,60 @@ def rechercher_agriculteurs(terme):
 
     finally:
         connection.close()
+
+def lister_agriculteurs_avec_resume(
+    inclure_archives=False,
+):
+    connection = get_connection()
+
+    try:
+        query = """
+            SELECT
+                a.id,
+                a.nom,
+                a.prenom,
+                a.cin,
+                a.telephone,
+                a.actif,
+
+                COUNT(
+                    CASE
+                        WHEN p.actif = 1
+                        THEN 1
+                    END
+                ) AS nombre_parcelles
+
+            FROM agriculteurs a
+
+            LEFT JOIN parcelles p
+                ON p.agriculteur_id = a.id
+        """
+
+        params = []
+
+        if not inclure_archives:
+            query += """
+                WHERE a.actif = 1
+            """
+
+        query += """
+            GROUP BY
+                a.id,
+                a.nom,
+                a.prenom,
+                a.cin,
+                a.telephone,
+                a.actif
+
+            ORDER BY
+                a.nom,
+                a.prenom
+        """
+
+        return connection.execute(
+            query,
+            params,
+        ).fetchall()
+
+    finally:
+        connection.close()

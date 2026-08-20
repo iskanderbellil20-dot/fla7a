@@ -110,4 +110,24 @@ QHeaderView::section {
     border-bottom: 1px solid #d8dfdc;
     font-weight: 600;
 }
+#dialogTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: #17252a;
+}
+
+QGroupBox {
+    font-weight: 600;
+    border: 1px solid #d8dfdc;
+    border-radius: 7px;
+    margin-top: 10px;
+    padding-top: 12px;
+    background-color: white;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 5px;
+}
 """
