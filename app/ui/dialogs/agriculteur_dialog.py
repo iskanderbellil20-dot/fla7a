@@ -18,13 +18,18 @@ from PySide6.QtWidgets import (
 )
 
 from app.services.agriculteur_service import (
+    archiver_parcelle,
     creer_agriculteur,
     modifier_agriculteur_complet,
     obtenir_agriculteur,
+    restaurer_parcelle,
 )
 
 from app.ui.dialogs.parcelle_dialog import (
     ParcelleDialog,
+)
+from app.ui.dialogs.operation_parcelle_dialog import (
+    OperationParcelleDialog,
 )
 
 
@@ -156,12 +161,45 @@ class AgriculteurDialog(QDialog):
             self.modifier_parcelle_selectionnee
         )
 
+        self.archive_parcelle_button = QPushButton(
+            "Archiver la parcelle"
+        )
+        self.transferer_button = QPushButton(
+            "Transférer"
+        )
+
+        self.transferer_button.clicked.connect(
+            self.transferer_parcelle_selectionnee
+        )
+
+        self.diviser_button = QPushButton(
+            "Diviser / céder"
+        )
+
+        self.diviser_button.clicked.connect(
+            self.diviser_parcelle_selectionnee
+        )
+        self.archive_parcelle_button.clicked.connect(
+            self.archiver_ou_restaurer_parcelle
+        )
+
         barre_parcelles.addWidget(
             ajouter_parcelle_button
         )
 
         barre_parcelles.addWidget(
             modifier_parcelle_button
+        )
+
+        barre_parcelles.addWidget(
+            self.archive_parcelle_button
+        )
+        barre_parcelles.addWidget(
+            self.transferer_button
+        )
+
+        barre_parcelles.addWidget(
+            self.diviser_button
         )
 
         barre_parcelles.addStretch()
@@ -226,6 +264,10 @@ class AgriculteurDialog(QDialog):
 
         self.table_parcelles.doubleClicked.connect(
             self.modifier_parcelle_selectionnee
+        )
+
+        self.table_parcelles.itemSelectionChanged.connect(
+            self.mettre_a_jour_action_parcelle
         )
 
         parcelles_layout.addWidget(
@@ -331,6 +373,8 @@ class AgriculteurDialog(QDialog):
                 parcelles.append(
                     {
                         "id": parcelle_id,
+                        "agriculteur_id":
+                            self.agriculteur_id,
                         "numero_lot":
                             parcelle["numero_lot"],
                         "superficie_m2":
@@ -362,8 +406,7 @@ class AgriculteurDialog(QDialog):
 
         for parcelle in parcelles:
             ligne = (
-                self.table_parcelles
-                .rowCount()
+                self.table_parcelles.rowCount()
             )
 
             self.table_parcelles.insertRow(
@@ -392,20 +435,14 @@ class AgriculteurDialog(QDialog):
                 )
             )
 
-            statut = (
-                "Nouveau"
-                if parcelle.get(
-                    "nouvelle"
-                )
-                else (
-                    "Actif"
-                    if parcelle.get(
-                        "actif",
-                        1,
-                    ) == 1
-                    else "Archivé"
-                )
-            )
+            if parcelle.get("nouvelle"):
+                statut = "Nouveau"
+
+            elif parcelle.get("actif", 1) == 1:
+                statut = "Actif"
+
+            else:
+                statut = "Archivé"
 
             self.table_parcelles.setItem(
                 ligne,
@@ -436,6 +473,8 @@ class AgriculteurDialog(QDialog):
                     statut
                 ),
             )
+
+        self.mettre_a_jour_action_parcelle()
 
     def ajouter_parcelle_formulaire(self):
         dialog = ParcelleDialog(
@@ -665,6 +704,406 @@ class AgriculteurDialog(QDialog):
                 "Impossible d'enregistrer",
                 str(error),
             )
+
+
+    
+
+    def archiver_ou_restaurer_parcelle(self):
+        ligne = self.table_parcelles.currentRow()
+
+        if ligne < 0:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez une parcelle.",
+            )
+            return
+
+        item = self.table_parcelles.item(
+            ligne,
+            0,
+        )
+
+        if item is None:
+            return
+
+        parcelle = item.data(
+            Qt.ItemDataRole.UserRole
+        )
+
+        if parcelle is None:
+            return
+
+        # ---------------------------------------
+        # Parcelle créée dans le formulaire
+        # mais pas encore enregistrée.
+        # ---------------------------------------
+
+        if parcelle.get("nouvelle"):
+            confirmation = QMessageBox.question(
+                self,
+                "Retirer la parcelle",
+                (
+                    f"Le lot {parcelle['numero_lot']} "
+                    "n'est pas encore enregistré.\n\n"
+                    "Voulez-vous le retirer "
+                    "du formulaire ?"
+                ),
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
+            )
+
+            if (
+                confirmation
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+
+            try:
+                self.nouvelles_parcelles.remove(
+                    parcelle
+                )
+            except ValueError:
+                return
+
+            self.actualiser_parcelles()
+            return
+
+        parcelle_id = parcelle["id"]
+
+        # ---------------------------------------
+        # Parcelle active → archivage
+        # ---------------------------------------
+
+        if parcelle.get("actif", 1) == 1:
+            confirmation = QMessageBox.question(
+                self,
+                "Archiver la parcelle",
+                (
+                    f"Voulez-vous archiver "
+                    f"le lot {parcelle['numero_lot']} ?\n\n"
+                    "La parcelle ne sera plus proposée "
+                    "pour les nouveaux tours d'eau."
+                ),
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
+            )
+
+            if (
+                confirmation
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+
+            try:
+                archiver_parcelle(
+                    parcelle_id=parcelle_id,
+                    motif=(
+                        "Archivage depuis "
+                        "la fiche agriculteur"
+                    ),
+                )
+
+            except Exception as error:
+                QMessageBox.critical(
+                    self,
+                    "Archivage impossible",
+                    str(error),
+                )
+                return
+
+        # ---------------------------------------
+        # Parcelle archivée → restauration
+        # ---------------------------------------
+
+        else:
+            confirmation = QMessageBox.question(
+                self,
+                "Restaurer la parcelle",
+                (
+                    f"Voulez-vous restaurer "
+                    f"le lot {parcelle['numero_lot']} ?"
+                ),
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
+            )
+
+            if (
+                confirmation
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+
+            try:
+                restaurer_parcelle(
+                    parcelle_id=parcelle_id,
+                    motif=(
+                        "Restauration depuis "
+                        "la fiche agriculteur"
+                    ),
+                )
+
+            except Exception as error:
+                QMessageBox.critical(
+                    self,
+                    "Restauration impossible",
+                    str(error),
+                )
+                return
+
+        # ---------------------------------------
+        # Recharger l'agriculteur depuis SQLite
+        # ---------------------------------------
+
+        self.agriculteur = obtenir_agriculteur(
+            self.agriculteur_id
+        )
+
+        # Une ancienne modification en mémoire
+        # concernant cette parcelle ne doit
+        # plus être appliquée ensuite.
+        self.parcelles_modifiees.pop(
+            parcelle_id,
+            None,
+        )
+
+        self.actualiser_parcelles()
+
+    def mettre_a_jour_action_parcelle(self):
+        parcelle = (
+            self.obtenir_parcelle_selectionnee()
+        )
+
+        if parcelle is None:
+            self.archive_parcelle_button.setText(
+                "Archiver la parcelle"
+            )
+
+            self.archive_parcelle_button.setEnabled(
+                False
+            )
+
+            self.transferer_button.setEnabled(
+                False
+            )
+
+            self.diviser_button.setEnabled(
+                False
+            )
+
+            return
+
+        self.archive_parcelle_button.setEnabled(
+            True
+        )
+
+        if parcelle.get("nouvelle"):
+            self.archive_parcelle_button.setText(
+                "Retirer du formulaire"
+            )
+
+            self.transferer_button.setEnabled(
+                False
+            )
+
+            self.diviser_button.setEnabled(
+                False
+            )
+
+            return
+
+        if parcelle.get("actif", 1) == 0:
+            self.archive_parcelle_button.setText(
+                "Restaurer la parcelle"
+            )
+
+            self.transferer_button.setEnabled(
+                False
+            )
+
+            self.diviser_button.setEnabled(
+                False
+            )
+
+            return
+
+        self.archive_parcelle_button.setText(
+            "Archiver la parcelle"
+        )
+
+        parcelle_modifiee = (
+            parcelle["id"]
+            in self.parcelles_modifiees
+        )
+
+        self.transferer_button.setEnabled(
+            not parcelle_modifiee
+        )
+
+        self.diviser_button.setEnabled(
+            not parcelle_modifiee
+        )
+
+    def obtenir_parcelle_selectionnee(self):
+        ligne = self.table_parcelles.currentRow()
+
+        if ligne < 0:
+            return None
+
+        item = self.table_parcelles.item(
+            ligne,
+            0,
+        )
+
+        if item is None:
+            return None
+
+        return item.data(
+            Qt.ItemDataRole.UserRole
+        )
+    
+    def transferer_parcelle_selectionnee(self):
+        parcelle = (
+            self.obtenir_parcelle_selectionnee()
+        )
+
+        if parcelle is None:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez une parcelle.",
+            )
+            return
+
+        if parcelle.get("nouvelle"):
+            QMessageBox.information(
+                self,
+                "Parcelle non enregistrée",
+                (
+                    "Cette parcelle n'est pas encore "
+                    "enregistrée.\n\n"
+                    "Enregistrez d'abord l'agriculteur."
+                ),
+            )
+            return
+
+        parcelle_id = parcelle["id"]
+
+        if (
+            parcelle_id
+            in self.parcelles_modifiees
+        ):
+            QMessageBox.warning(
+                self,
+                "Modifications non enregistrées",
+                (
+                    "Cette parcelle contient des "
+                    "modifications non enregistrées.\n\n"
+                    "Cliquez d'abord sur Enregistrer "
+                    "avant de la transférer."
+                ),
+            )
+            return
+
+        if parcelle.get("actif", 1) == 0:
+            QMessageBox.information(
+                self,
+                "Parcelle archivée",
+                "Une parcelle archivée ne peut pas être transférée.",
+            )
+            return
+
+        dialog = OperationParcelleDialog(
+            operation="TRANSFERT",
+            parcelle=parcelle,
+            parent=self,
+        )
+
+        if dialog.exec():
+            self.agriculteur = (
+                obtenir_agriculteur(
+                    self.agriculteur_id
+                )
+            )
+
+            self.parcelles_modifiees.pop(
+                parcelle_id,
+                None,
+            )
+
+            self.actualiser_parcelles()
+
+
+    def diviser_parcelle_selectionnee(self):
+        parcelle = (
+            self.obtenir_parcelle_selectionnee()
+        )
+
+        if parcelle is None:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez une parcelle.",
+            )
+            return
+
+        if parcelle.get("nouvelle"):
+            QMessageBox.information(
+                self,
+                "Parcelle non enregistrée",
+                (
+                    "Cette parcelle n'est pas encore "
+                    "enregistrée.\n\n"
+                    "Enregistrez d'abord l'agriculteur."
+                ),
+            )
+            return
+
+        parcelle_id = parcelle["id"]
+
+        if (
+            parcelle_id
+            in self.parcelles_modifiees
+        ):
+            QMessageBox.warning(
+                self,
+                "Modifications non enregistrées",
+                (
+                    "Cette parcelle contient des "
+                    "modifications non enregistrées.\n\n"
+                    "Cliquez d'abord sur Enregistrer "
+                    "avant de la diviser."
+                ),
+            )
+            return
+
+        if parcelle.get("actif", 1) == 0:
+            QMessageBox.information(
+                self,
+                "Parcelle archivée",
+                "Une parcelle archivée ne peut pas être divisée.",
+            )
+            return
+
+        dialog = OperationParcelleDialog(
+            operation="DIVISION",
+            parcelle=parcelle,
+            parent=self,
+        )
+
+        if dialog.exec():
+            self.agriculteur = (
+                obtenir_agriculteur(
+                    self.agriculteur_id
+                )
+            )
+
+            self.parcelles_modifiees.pop(
+                parcelle_id,
+                None,
+            )
+
+            self.actualiser_parcelles()
 
 
 def lister_ressources_pour_noms(
