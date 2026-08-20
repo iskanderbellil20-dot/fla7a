@@ -58,4 +58,56 @@ QPushButton#navigationButton:checked {
     font-size: 14px;
     color: #667085;
 }
+QLineEdit,
+QComboBox,
+QTextEdit {
+    background-color: white;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+QLineEdit:focus,
+QComboBox:focus,
+QTextEdit:focus {
+    border: 1px solid #2f6f5e;
+}
+
+QPushButton {
+    padding: 8px 14px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background-color: white;
+}
+
+QPushButton:hover {
+    background-color: #f0f3f2;
+}
+
+QPushButton#primaryButton {
+    background-color: #2f6f5e;
+    color: white;
+    border: none;
+    font-weight: 600;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #245649;
+}
+
+QTableWidget {
+    background-color: white;
+    border: 1px solid #e0e4e7;
+    border-radius: 6px;
+    gridline-color: #edf0f2;
+    alternate-background-color: #f8faf9;
+}
+
+QHeaderView::section {
+    background-color: #edf2f0;
+    padding: 9px;
+    border: none;
+    border-bottom: 1px solid #d8dfdc;
+    font-weight: 600;
+}
 """
