@@ -9,7 +9,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
+from app.ui.pages.nouveau_tour_page import (
+    NouveauTourPage,
+)
 from app.ui.pages.accueil_page import AccueilPage
 from app.ui.pages.agriculteurs_page import AgriculteursPage
 from app.ui.pages.ressources_page import RessourcesPage
@@ -42,18 +44,47 @@ class MainWindow(QMainWindow):
         self.pages.setObjectName("contentArea")
 
         self.accueil_page = AccueilPage()
-        self.agriculteurs_page = AgriculteursPage()
+
+        self.nouveau_tour_page = (
+            NouveauTourPage()
+        )
+
+        self.agriculteurs_page = (
+            AgriculteursPage()
+        )
         self.ressources_page = RessourcesPage()
         self.planning_page = PlanningPage()
         self.historique_page = HistoriquePage()
         self.sauvegarde_page = SauvegardePage()
 
-        self.pages.addWidget(self.accueil_page)
-        self.pages.addWidget(self.agriculteurs_page)
-        self.pages.addWidget(self.ressources_page)
-        self.pages.addWidget(self.planning_page)
-        self.pages.addWidget(self.historique_page)
-        self.pages.addWidget(self.sauvegarde_page)
+        self.pages.addWidget(
+            self.accueil_page
+        )
+
+        self.pages.addWidget(
+            self.nouveau_tour_page
+        )
+
+        self.pages.addWidget(
+            self.agriculteurs_page
+        )
+
+        self.pages.addWidget(
+            self.ressources_page
+        )
+
+        self.pages.addWidget(
+            self.planning_page
+        )
+
+        self.pages.addWidget(
+            self.historique_page
+        )
+
+        self.pages.addWidget(
+            self.sauvegarde_page
+        )
+        
 
         layout_principal.addWidget(sidebar)
 
@@ -97,6 +128,7 @@ class MainWindow(QMainWindow):
 
         noms = [
             "Accueil",
+            "+ Nouveau tour d'eau",
             "Agriculteurs",
             "Ressources d'eau",
             "Planning",
