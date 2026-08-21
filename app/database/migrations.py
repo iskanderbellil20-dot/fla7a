@@ -320,6 +320,62 @@ MIGRATIONS = [
         ON parcelles (agriculteur_id);
         """
     ),
+        (
+        6,
+        """
+        UPDATE tours_eau
+        SET
+            nom_agriculteur_snapshot = (
+                SELECT a.nom
+                FROM parcelles p
+                INNER JOIN agriculteurs a
+                    ON a.id = p.agriculteur_id
+                WHERE p.id = tours_eau.parcelle_id
+            ),
+
+            prenom_agriculteur_snapshot = (
+                SELECT a.prenom
+                FROM parcelles p
+                INNER JOIN agriculteurs a
+                    ON a.id = p.agriculteur_id
+                WHERE p.id = tours_eau.parcelle_id
+            ),
+
+            cin_snapshot = (
+                SELECT a.cin
+                FROM parcelles p
+                INNER JOIN agriculteurs a
+                    ON a.id = p.agriculteur_id
+                WHERE p.id = tours_eau.parcelle_id
+            ),
+
+            telephone_snapshot = (
+                SELECT a.telephone
+                FROM parcelles p
+                INNER JOIN agriculteurs a
+                    ON a.id = p.agriculteur_id
+                WHERE p.id = tours_eau.parcelle_id
+            ),
+
+            numero_lot_snapshot = (
+                SELECT p.numero_lot
+                FROM parcelles p
+                WHERE p.id = tours_eau.parcelle_id
+            ),
+
+            superficie_m2_snapshot = (
+                SELECT p.superficie_m2
+                FROM parcelles p
+                WHERE p.id = tours_eau.parcelle_id
+            ),
+
+            ressource_nom_snapshot = (
+                SELECT r.nom
+                FROM ressources_eau r
+                WHERE r.id = tours_eau.ressource_id
+            );
+        """
+    ),
 ]
 
 def create_migrations_table(connection):
@@ -341,6 +397,54 @@ def get_current_version(connection):
 
     return row[0] if row[0] is not None else 0
 
+def preparer_migration_6(connection):
+    colonnes_existantes = {
+        row[1]
+        for row in connection.execute(
+            "PRAGMA table_info(tours_eau)"
+        ).fetchall()
+    }
+
+    colonnes_a_ajouter = {
+        "nom_agriculteur_snapshot":
+            "TEXT",
+
+        "prenom_agriculteur_snapshot":
+            "TEXT",
+
+        "cin_snapshot":
+            "TEXT",
+
+        "telephone_snapshot":
+            "TEXT",
+
+        "numero_lot_snapshot":
+            "TEXT",
+
+        "superficie_m2_snapshot":
+            "REAL",
+
+        "ressource_nom_snapshot":
+            "TEXT",
+    }
+
+    for nom_colonne, type_sql in (
+        colonnes_a_ajouter.items()
+    ):
+        if (
+            nom_colonne
+            in colonnes_existantes
+        ):
+            continue
+
+        connection.execute(
+            f"""
+            ALTER TABLE tours_eau
+            ADD COLUMN {nom_colonne} {type_sql}
+            """
+        )
+
+    connection.commit()
 
 def run_migrations():
     connection = get_connection()
@@ -359,14 +463,17 @@ def run_migrations():
             if version == 5:
                 connection.commit()
                 connection.execute(
-                    "PRAGMA foreign_keys = OFF"
+                    #"PRAGMA foreign_keys = OFF"
                 )
-
+            if version == 6:
+                preparer_migration_6(
+                    connection
+                )
             connection.executescript(sql)
 
             if version == 5:
                 connection.execute(
-                    "PRAGMA foreign_keys = ON"
+                    #"PRAGMA foreign_keys = ON"
                 )    
 
             connection.executescript(sql)

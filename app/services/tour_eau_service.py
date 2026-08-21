@@ -82,7 +82,7 @@ def verifier_parcelle_et_ressource(
             p.id,
             p.numero_lot,
             p.superficie_m2,
-
+            a.telephone,
             a.id,
             a.nom,
             a.prenom,
@@ -122,10 +122,10 @@ def verifier_parcelle_et_ressource(
             "autorisée pour cette parcelle."
         )
 
-    if row[9] != "DISPONIBLE":
+    if row[10] != "DISPONIBLE":
         raise ValueError(
-            f"La ressource {row[8]} n'est pas disponible "
-            f"(état actuel : {row[9]})."
+            f"La ressource {row[9]} n'est pas disponible "
+            f"(état actuel : {row[10]})."
         )
 
     return row
@@ -292,15 +292,56 @@ def creer_tour_eau(
                 numero_recu,
                 parcelle_id,
                 ressource_id,
+
                 date_heure_debut,
                 date_heure_fin,
                 duree_minutes,
+
                 statut,
-                remarque
+                remarque,
+
+                nom_agriculteur_snapshot,
+                prenom_agriculteur_snapshot,
+                cin_snapshot,
+                telephone_snapshot,
+
+                numero_lot_snapshot,
+                superficie_m2_snapshot,
+
+                ressource_nom_snapshot
             )
-            VALUES (?, ?, ?, ?, ?, ?, 'PLANIFIE', ?)
+            VALUES (
+                ?, ?, ?,
+                ?, ?, ?,
+                'PLANIFIE', ?,
+                ?, ?, ?, ?,
+                ?, ?,
+                ?
+            )
             """,
             (
+                numero_recu,
+                parcelle_id,
+                ressource_id,
+
+                debut.strftime(FORMAT_DB),
+                fin.strftime(FORMAT_DB),
+                duree_minutes,
+
+                remarque,
+
+                informations[4],
+                informations[5],
+                informations[6],
+                informations[7],
+
+                informations[1],
+                informations[2],
+
+                informations[9],
+            ),
+        )
+        (
                 numero_recu,
                 parcelle_id,
                 ressource_id,
@@ -309,7 +350,7 @@ def creer_tour_eau(
                 duree_minutes,
                 remarque,
             ),
-        )
+        
 
         connection.commit()
 
@@ -326,9 +367,9 @@ def creer_tour_eau(
             "nom": informations[4],
             "prenom": informations[5],
             "cin": informations[6],
-
-            "ressource_id": informations[7],
-            "ressource_nom": informations[8],
+            "telephone": informations[7],
+            "ressource_id": informations[8],
+            "ressource_nom": informations[9],
 
             "date_heure_debut": debut.strftime(
                 FORMAT_DB
@@ -365,34 +406,30 @@ def obtenir_tour_eau(tour_id):
             SELECT
                 t.id,
                 t.numero_recu,
+
                 t.parcelle_id,
-                p.numero_lot,
-                p.superficie_m2,
-                a.id,
-                a.nom,
-                a.prenom,
-                a.cin,
-                a.telephone,
                 t.ressource_id,
-                r.nom,
+
                 t.date_heure_debut,
                 t.date_heure_fin,
                 t.duree_minutes,
                 t.statut,
                 t.remarque,
+
+                t.nom_agriculteur_snapshot,
+                t.prenom_agriculteur_snapshot,
+                t.cin_snapshot,
+                t.telephone_snapshot,
+                t.numero_lot_snapshot,
+                t.superficie_m2_snapshot,
+                t.ressource_nom_snapshot,
+
                 t.date_creation,
-                t.date_modification
+                t.date_modification,
+
+                t.tour_origine_id
+
             FROM tours_eau t
-
-            INNER JOIN parcelles p
-                ON p.id = t.parcelle_id
-
-            INNER JOIN agriculteurs a
-                ON a.id = p.agriculteur_id
-
-            INNER JOIN ressources_eau r
-                ON r.id = t.ressource_id
-
             WHERE t.id = ?
             """,
             (tour_id,),
@@ -403,25 +440,35 @@ def obtenir_tour_eau(tour_id):
 
         return {
             "id": row[0],
+
             "numero_recu": row[1],
-            "numero_recu_formate": f"{row[1]:06d}",
+            "numero_recu_formate":
+                f"{row[1]:06d}",
+
             "parcelle_id": row[2],
-            "numero_lot": row[3],
-            "superficie_m2": row[4],
-            "agriculteur_id": row[5],
-            "nom": row[6],
-            "prenom": row[7],
-            "cin": row[8],
-            "telephone": row[9],
-            "ressource_id": row[10],
-            "ressource_nom": row[11],
-            "date_heure_debut": row[12],
-            "date_heure_fin": row[13],
-            "duree_minutes": row[14],
-            "statut": row[15],
-            "remarque": row[16],
-            "date_creation": row[17],
-            "date_modification": row[18],
+            "ressource_id": row[3],
+
+            "date_heure_debut": row[4],
+            "date_heure_fin": row[5],
+            "duree_minutes": row[6],
+
+            "statut": row[7],
+            "remarque": row[8],
+
+            "nom": row[9],
+            "prenom": row[10],
+            "cin": row[11],
+            "telephone": row[12],
+
+            "numero_lot": row[13],
+            "superficie_m2": row[14],
+
+            "ressource_nom": row[15],
+
+            "date_creation": row[16],
+            "date_modification": row[17],
+
+            "tour_origine_id": row[18],
         }
 
     finally:

@@ -21,7 +21,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
+from app.ui.dialogs.recu_dialog import (
+    RecuDialog,
+)
 from app.services.agriculteur_service import (
     obtenir_agriculteur,
     rechercher_agriculteurs,
@@ -751,23 +753,12 @@ class NouveauTourPage(QWidget):
             )
             return
 
-        QMessageBox.information(
-            self,
-            "Tour enregistré",
-            (
-                "Le tour d'eau a été enregistré "
-                "avec succès.\n\n"
-                f"Reçu N° "
-                f"{tour['numero_recu_formate']}\n"
-                f"{tour['prenom']} {tour['nom']}\n"
-                f"Lot {tour['numero_lot']}\n"
-                f"{tour['ressource_nom']}\n\n"
-                f"Début : "
-                f"{tour['date_heure_debut']}\n"
-                f"Fin : "
-                f"{tour['date_heure_fin']}"
-            ),
+        dialog = RecuDialog(
+            tour_id=tour["id"],
+            parent=self,
         )
+
+        dialog.exec()
 
         self.reinitialiser_apres_creation()
 
