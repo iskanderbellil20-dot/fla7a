@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.database.connection import get_connection
 from app.services.tour_eau_service import FORMAT_DB
+
 
 
 TYPES_INDISPONIBILITE = (
@@ -426,6 +427,130 @@ def rechercher_tours_impactes(
 
                     "ressource_id": row[13],
                     "ressource_nom": row[14],
+                }
+            )
+
+        return resultat
+
+    finally:
+        connection.close()
+
+
+def lister_indisponibilites_pour_jour(
+    date_jour,
+):
+    if isinstance(
+        date_jour,
+        str,
+    ):
+        try:
+            jour = datetime.strptime(
+                date_jour,
+                "%Y-%m-%d",
+            )
+
+        except ValueError as error:
+            raise ValueError(
+                "La date doit respecter "
+                "le format AAAA-MM-JJ."
+            ) from error
+
+    elif isinstance(
+        date_jour,
+        datetime,
+    ):
+        jour = date_jour
+
+    else:
+        raise ValueError(
+            "Date invalide."
+        )
+
+    debut_jour = jour.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    fin_jour = (
+        debut_jour
+        + timedelta(days=1)
+    )
+
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                i.id,
+                i.ressource_id,
+                r.nom,
+
+                i.type,
+
+                i.date_heure_debut,
+                i.date_heure_fin,
+
+                i.motif,
+                i.remarque
+
+            FROM indisponibilites i
+
+            INNER JOIN ressources_eau r
+                ON r.id = i.ressource_id
+
+            WHERE i.date_heure_debut < ?
+
+              AND (
+                    i.date_heure_fin IS NULL
+                    OR i.date_heure_fin > ?
+              )
+
+            ORDER BY
+                i.ressource_id,
+                i.date_heure_debut
+            """,
+            (
+                fin_jour.strftime(
+                    FORMAT_DB
+                ),
+
+                debut_jour.strftime(
+                    FORMAT_DB
+                ),
+            ),
+        ).fetchall()
+
+        resultat = []
+
+        for row in rows:
+            resultat.append(
+                {
+                    "id":
+                        row[0],
+
+                    "ressource_id":
+                        row[1],
+
+                    "ressource_nom":
+                        row[2],
+
+                    "type":
+                        row[3],
+
+                    "date_heure_debut":
+                        row[4],
+
+                    "date_heure_fin":
+                        row[5],
+
+                    "motif":
+                        row[6],
+
+                    "remarque":
+                        row[7],
                 }
             )
 

@@ -6,7 +6,6 @@ from app.database.connection import get_connection
 
 
 
-
 FORMAT_DB = "%Y-%m-%d %H:%M:%S"
 
 STATUTS_BLOQUANTS = (
@@ -81,12 +80,14 @@ def verifier_parcelle_et_ressource(
         SELECT
             p.id,
             p.numero_lot,
+            p.nom_lot,
             p.superficie_m2,
-            a.telephone,
+
             a.id,
             a.nom,
             a.prenom,
             a.cin,
+            a.telephone,
 
             r.id,
             r.nom,
@@ -122,10 +123,11 @@ def verifier_parcelle_et_ressource(
             "autorisée pour cette parcelle."
         )
 
-    if row[10] != "DISPONIBLE":
+    if row[11] != "DISPONIBLE":
         raise ValueError(
-            f"La ressource {row[9]} n'est pas disponible "
-            f"(état actuel : {row[10]})."
+            f"La ressource {row[10]} "
+            "n'est pas disponible "
+            f"(état actuel : {row[11]})."
         )
 
     return row
@@ -238,18 +240,22 @@ def creer_tour_eau(
     duree_minutes,
     remarque=None,
 ):
-    debut, fin, duree_minutes = calculer_fin(
-        date_heure_debut,
-        duree_minutes,
+    debut, fin, duree_minutes = (
+        calculer_fin(
+            date_heure_debut,
+            duree_minutes,
+        )
     )
 
     connection = get_connection()
 
     try:
-        informations = verifier_parcelle_et_ressource(
-            connection,
-            parcelle_id,
-            ressource_id,
+        informations = (
+            verifier_parcelle_et_ressource(
+                connection,
+                parcelle_id,
+                ressource_id,
+            )
         )
 
         verifier_indisponibilite(
@@ -267,23 +273,17 @@ def creer_tour_eau(
         )
 
         if conflit is not None:
-            numero_recu = conflit[1]
-            ancien_debut = conflit[2]
-            ancienne_fin = conflit[3]
-            lot = conflit[4]
-            nom = conflit[5]
-            prenom = conflit[6]
-
             raise ValueError(
                 "Conflit de réservation. "
-                f"La ressource est déjà réservée par "
-                f"{prenom} {nom}, lot {lot}, "
-                f"du {ancien_debut} au {ancienne_fin} "
-                f"(reçu N° {numero_recu:06d})."
+                f"La ressource est déjà réservée "
+                f"du {conflit[2]} au {conflit[3]} "
+                f"(reçu N° {conflit[1]:06d})."
             )
 
-        numero_recu = obtenir_prochain_numero_recu(
-            connection
+        numero_recu = (
+            obtenir_prochain_numero_recu(
+                connection
+            )
         )
 
         cursor = connection.execute(
@@ -306,6 +306,7 @@ def creer_tour_eau(
                 telephone_snapshot,
 
                 numero_lot_snapshot,
+                nom_lot_snapshot,
                 superficie_m2_snapshot,
 
                 ressource_nom_snapshot
@@ -315,7 +316,7 @@ def creer_tour_eau(
                 ?, ?, ?,
                 'PLANIFIE', ?,
                 ?, ?, ?, ?,
-                ?, ?,
+                ?, ?, ?,
                 ?
             )
             """,
@@ -330,62 +331,90 @@ def creer_tour_eau(
 
                 remarque,
 
-                informations[4],
                 informations[5],
                 informations[6],
                 informations[7],
+                informations[8],
 
                 informations[1],
                 informations[2],
+                informations[3],
 
-                informations[9],
+                informations[10],
             ),
         )
-        (
-                numero_recu,
-                parcelle_id,
-                ressource_id,
-                debut.strftime(FORMAT_DB),
-                fin.strftime(FORMAT_DB),
-                duree_minutes,
-                remarque,
-            ),
-        
 
         connection.commit()
 
         return {
-            "id": cursor.lastrowid,
-            "numero_recu": numero_recu,
-            "numero_recu_formate": f"{numero_recu:06d}",
+            "id":
+                cursor.lastrowid,
 
-            "parcelle_id": parcelle_id,
-            "numero_lot": informations[1],
-            "superficie_m2": informations[2],
+            "numero_recu":
+                numero_recu,
 
-            "agriculteur_id": informations[3],
-            "nom": informations[4],
-            "prenom": informations[5],
-            "cin": informations[6],
-            "telephone": informations[7],
-            "ressource_id": informations[8],
-            "ressource_nom": informations[9],
+            "numero_recu_formate":
+                f"{numero_recu:06d}",
 
-            "date_heure_debut": debut.strftime(
-                FORMAT_DB
-            ),
-            "date_heure_fin": fin.strftime(
-                FORMAT_DB
-            ),
+            "parcelle_id":
+                parcelle_id,
 
-            "duree_minutes": duree_minutes,
-            "statut": "PLANIFIE",
+            "numero_lot":
+                informations[1],
+
+            "nom_lot":
+                informations[2],
+
+            "superficie_m2":
+                informations[3],
+
+            "agriculteur_id":
+                informations[4],
+
+            "nom":
+                informations[5],
+
+            "prenom":
+                informations[6],
+
+            "cin":
+                informations[7],
+
+            "telephone":
+                informations[8],
+
+            "ressource_id":
+                informations[9],
+
+            "ressource_nom":
+                informations[10],
+
+            "date_heure_debut":
+                debut.strftime(
+                    FORMAT_DB
+                ),
+
+            "date_heure_fin":
+                fin.strftime(
+                    FORMAT_DB
+                ),
+
+            "duree_minutes":
+                duree_minutes,
+
+            "statut":
+                "PLANIFIE",
+
+            "remarque":
+                remarque,
         }
 
     except sqlite3.IntegrityError as error:
         connection.rollback()
+
         raise ValueError(
-            "Impossible d'enregistrer le tour d'eau."
+            "Impossible d'enregistrer "
+            "le tour d'eau."
         ) from error
 
     except Exception:
@@ -397,7 +426,9 @@ def creer_tour_eau(
 
 
 
-def obtenir_tour_eau(tour_id):
+def obtenir_tour_eau(
+    tour_id,
+):
     connection = get_connection()
 
     try:
@@ -413,6 +444,7 @@ def obtenir_tour_eau(tour_id):
                 t.date_heure_debut,
                 t.date_heure_fin,
                 t.duree_minutes,
+
                 t.statut,
                 t.remarque,
 
@@ -420,8 +452,11 @@ def obtenir_tour_eau(tour_id):
                 t.prenom_agriculteur_snapshot,
                 t.cin_snapshot,
                 t.telephone_snapshot,
+
                 t.numero_lot_snapshot,
+                t.nom_lot_snapshot,
                 t.superficie_m2_snapshot,
+
                 t.ressource_nom_snapshot,
 
                 t.date_creation,
@@ -430,6 +465,7 @@ def obtenir_tour_eau(tour_id):
                 t.tour_origine_id
 
             FROM tours_eau t
+
             WHERE t.id = ?
             """,
             (tour_id,),
@@ -439,36 +475,68 @@ def obtenir_tour_eau(tour_id):
             return None
 
         return {
-            "id": row[0],
+            "id":
+                row[0],
 
-            "numero_recu": row[1],
+            "numero_recu":
+                row[1],
+
             "numero_recu_formate":
                 f"{row[1]:06d}",
 
-            "parcelle_id": row[2],
-            "ressource_id": row[3],
+            "parcelle_id":
+                row[2],
 
-            "date_heure_debut": row[4],
-            "date_heure_fin": row[5],
-            "duree_minutes": row[6],
+            "ressource_id":
+                row[3],
 
-            "statut": row[7],
-            "remarque": row[8],
+            "date_heure_debut":
+                row[4],
 
-            "nom": row[9],
-            "prenom": row[10],
-            "cin": row[11],
-            "telephone": row[12],
+            "date_heure_fin":
+                row[5],
 
-            "numero_lot": row[13],
-            "superficie_m2": row[14],
+            "duree_minutes":
+                row[6],
 
-            "ressource_nom": row[15],
+            "statut":
+                row[7],
 
-            "date_creation": row[16],
-            "date_modification": row[17],
+            "remarque":
+                row[8],
 
-            "tour_origine_id": row[18],
+            "nom":
+                row[9],
+
+            "prenom":
+                row[10],
+
+            "cin":
+                row[11],
+
+            "telephone":
+                row[12],
+
+            "numero_lot":
+                row[13],
+
+            "nom_lot":
+                row[14],
+
+            "superficie_m2":
+                row[15],
+
+            "ressource_nom":
+                row[16],
+
+            "date_creation":
+                row[17],
+
+            "date_modification":
+                row[18],
+
+            "tour_origine_id":
+                row[19],
         }
 
     finally:
@@ -583,7 +651,17 @@ def modifier_tour_eau(
                 date_heure_fin,
                 duree_minutes,
                 statut,
-                remarque
+                remarque,
+
+                nom_agriculteur_snapshot,
+                prenom_agriculteur_snapshot,
+                cin_snapshot,
+                telephone_snapshot,
+                numero_lot_snapshot,
+                nom_lot_snapshot,
+                superficie_m2_snapshot,
+                ressource_nom_snapshot
+
             FROM tours_eau
             WHERE id = ?
             """,
@@ -597,13 +675,18 @@ def modifier_tour_eau(
 
         if ancien_row[6] != "PLANIFIE":
             raise ValueError(
-                "Seul un tour planifié peut être modifié."
+                "Seul un tour planifié "
+                "peut être modifié."
             )
 
-        verifier_parcelle_et_ressource(
-            connection,
-            parcelle_id,
-            ressource_id,
+        # Informations actuelles correctes
+        # de la parcelle + ressource.
+        informations = (
+            verifier_parcelle_et_ressource(
+                connection,
+                parcelle_id,
+                ressource_id,
+            )
         )
 
         verifier_indisponibilite(
@@ -627,7 +710,7 @@ def modifier_tour_eau(
                 "le nouveau créneau est déjà occupé."
             )
 
-        ancien = {
+        ancienne_valeur = {
             "numero_recu": ancien_row[0],
             "parcelle_id": ancien_row[1],
             "ressource_id": ancien_row[2],
@@ -636,7 +719,45 @@ def modifier_tour_eau(
             "duree_minutes": ancien_row[5],
             "statut": ancien_row[6],
             "remarque": ancien_row[7],
+
+            "nom":
+                ancien_row[8],
+
+            "prenom":
+                ancien_row[9],
+
+            "cin":
+                ancien_row[10],
+
+            "telephone":
+                ancien_row[11],
+
+            "numero_lot":
+                ancien_row[12],
+
+            "nom_lot":
+                ancien_row[13],
+
+            "superficie_m2":
+                ancien_row[14],
+
+            "ressource_nom":
+                ancien_row[15],
         }
+
+        # ---------------------------------
+        # IMPORTANT :
+        # index après V7
+        #
+        # 1 numero_lot
+        # 2 nom_lot
+        # 3 superficie
+        # 5 nom
+        # 6 prénom
+        # 7 CIN
+        # 8 téléphone
+        # 10 nom ressource
+        # ---------------------------------
 
         connection.execute(
             """
@@ -644,33 +765,106 @@ def modifier_tour_eau(
             SET
                 parcelle_id = ?,
                 ressource_id = ?,
+
                 date_heure_debut = ?,
                 date_heure_fin = ?,
                 duree_minutes = ?,
+
                 remarque = ?,
-                date_modification = CURRENT_TIMESTAMP
+
+                nom_agriculteur_snapshot = ?,
+                prenom_agriculteur_snapshot = ?,
+                cin_snapshot = ?,
+                telephone_snapshot = ?,
+
+                numero_lot_snapshot = ?,
+                nom_lot_snapshot = ?,
+                superficie_m2_snapshot = ?,
+
+                ressource_nom_snapshot = ?,
+
+                date_modification =
+                    CURRENT_TIMESTAMP
+
             WHERE id = ?
             """,
             (
                 parcelle_id,
                 ressource_id,
+
                 debut.strftime(FORMAT_DB),
                 fin.strftime(FORMAT_DB),
                 duree_minutes,
+
                 remarque,
+
+                informations[5],
+                informations[6],
+                informations[7],
+                informations[8],
+
+                informations[1],
+                informations[2],
+                informations[3],
+
+                informations[10],
+
                 tour_id,
             ),
         )
 
-        nouveau = {
-            "numero_recu": ancien_row[0],
-            "parcelle_id": parcelle_id,
-            "ressource_id": ressource_id,
-            "date_heure_debut": debut.strftime(FORMAT_DB),
-            "date_heure_fin": fin.strftime(FORMAT_DB),
-            "duree_minutes": duree_minutes,
-            "statut": "PLANIFIE",
-            "remarque": remarque,
+        nouvelle_valeur = {
+            "numero_recu":
+                ancien_row[0],
+
+            "parcelle_id":
+                parcelle_id,
+
+            "ressource_id":
+                ressource_id,
+
+            "date_heure_debut":
+                debut.strftime(
+                    FORMAT_DB
+                ),
+
+            "date_heure_fin":
+                fin.strftime(
+                    FORMAT_DB
+                ),
+
+            "duree_minutes":
+                duree_minutes,
+
+            "statut":
+                "PLANIFIE",
+
+            "remarque":
+                remarque,
+
+            "nom":
+                informations[5],
+
+            "prenom":
+                informations[6],
+
+            "cin":
+                informations[7],
+
+            "telephone":
+                informations[8],
+
+            "numero_lot":
+                informations[1],
+
+            "nom_lot":
+                informations[2],
+
+            "superficie_m2":
+                informations[3],
+
+            "ressource_nom":
+                informations[10],
         }
 
         enregistrer_historique(
@@ -678,8 +872,12 @@ def modifier_tour_eau(
             type_objet="TOUR_EAU",
             objet_id=tour_id,
             action="MODIFICATION",
-            ancienne_valeur=ancien,
-            nouvelle_valeur=nouveau,
+            ancienne_valeur=(
+                ancienne_valeur
+            ),
+            nouvelle_valeur=(
+                nouvelle_valeur
+            ),
             motif=motif,
         )
 
@@ -733,15 +931,18 @@ def reporter_tour_eau(
 
         if ancien_row[7] != "PLANIFIE":
             raise ValueError(
-                "Seul un tour planifié peut être reporté."
+                "Seul un tour planifié "
+                "peut être reporté."
             )
 
         parcelle_id = ancien_row[2]
 
-        verifier_parcelle_et_ressource(
-            connection,
-            parcelle_id,
-            nouvelle_ressource_id,
+        informations = (
+            verifier_parcelle_et_ressource(
+                connection,
+                parcelle_id,
+                nouvelle_ressource_id,
+            )
         )
 
         verifier_indisponibilite(
@@ -765,8 +966,10 @@ def reporter_tour_eau(
                 "le nouveau créneau est déjà occupé."
             )
 
-        nouveau_numero_recu = obtenir_prochain_numero_recu(
-            connection
+        nouveau_numero_recu = (
+            obtenir_prochain_numero_recu(
+                connection
+            )
         )
 
         cursor = connection.execute(
@@ -775,62 +978,148 @@ def reporter_tour_eau(
                 numero_recu,
                 parcelle_id,
                 ressource_id,
+
                 date_heure_debut,
                 date_heure_fin,
                 duree_minutes,
+
                 statut,
                 remarque,
-                tour_origine_id
+
+                tour_origine_id,
+
+                nom_agriculteur_snapshot,
+                prenom_agriculteur_snapshot,
+                cin_snapshot,
+                telephone_snapshot,
+
+                numero_lot_snapshot,
+                nom_lot_snapshot,
+                superficie_m2_snapshot,
+
+                ressource_nom_snapshot
             )
-            VALUES (?, ?, ?, ?, ?, ?, 'PLANIFIE', ?, ?)
+            VALUES (
+                ?, ?, ?,
+                ?, ?, ?,
+                'PLANIFIE', ?,
+                ?,
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                ?
+            )
             """,
             (
                 nouveau_numero_recu,
                 parcelle_id,
                 nouvelle_ressource_id,
+
                 debut.strftime(FORMAT_DB),
                 fin.strftime(FORMAT_DB),
                 duree_minutes,
+
                 remarque,
+
                 tour_id,
+
+                informations[5],
+                informations[6],
+                informations[7],
+                informations[8],
+
+                informations[1],
+                informations[2],
+                informations[3],
+
+                informations[10],
             ),
         )
 
-        nouveau_tour_id = cursor.lastrowid
+        nouveau_tour_id = (
+            cursor.lastrowid
+        )
 
         connection.execute(
             """
             UPDATE tours_eau
             SET
                 statut = 'REPORTE',
-                date_modification = CURRENT_TIMESTAMP
+                date_modification =
+                    CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (tour_id,),
         )
 
         ancien = {
-            "numero_recu": ancien_row[1],
-            "parcelle_id": ancien_row[2],
-            "ressource_id": ancien_row[3],
-            "date_heure_debut": ancien_row[4],
-            "date_heure_fin": ancien_row[5],
-            "duree_minutes": ancien_row[6],
-            "statut": ancien_row[7],
-            "remarque": ancien_row[8],
+            "numero_recu":
+                ancien_row[1],
+
+            "parcelle_id":
+                ancien_row[2],
+
+            "ressource_id":
+                ancien_row[3],
+
+            "date_heure_debut":
+                ancien_row[4],
+
+            "date_heure_fin":
+                ancien_row[5],
+
+            "duree_minutes":
+                ancien_row[6],
+
+            "statut":
+                ancien_row[7],
+
+            "remarque":
+                ancien_row[8],
         }
 
         nouveau = {
-            "tour_id": nouveau_tour_id,
-            "numero_recu": nouveau_numero_recu,
-            "parcelle_id": parcelle_id,
-            "ressource_id": nouvelle_ressource_id,
-            "date_heure_debut": debut.strftime(FORMAT_DB),
-            "date_heure_fin": fin.strftime(FORMAT_DB),
-            "duree_minutes": duree_minutes,
-            "statut": "PLANIFIE",
-            "remarque": remarque,
-            "tour_origine_id": tour_id,
+            "tour_id":
+                nouveau_tour_id,
+
+            "numero_recu":
+                nouveau_numero_recu,
+
+            "parcelle_id":
+                parcelle_id,
+
+            "ressource_id":
+                nouvelle_ressource_id,
+
+            "date_heure_debut":
+                debut.strftime(
+                    FORMAT_DB
+                ),
+
+            "date_heure_fin":
+                fin.strftime(
+                    FORMAT_DB
+                ),
+
+            "duree_minutes":
+                duree_minutes,
+
+            "statut":
+                "PLANIFIE",
+
+            "remarque":
+                remarque,
+
+            "tour_origine_id":
+                tour_id,
+
+            "nom_lot":
+                informations[2],
+
+            "superficie_m2":
+                informations[3],
+
+            "ressource_nom":
+                informations[10],
         }
 
         enregistrer_historique(
@@ -843,20 +1132,199 @@ def reporter_tour_eau(
             motif=motif,
         )
 
+        enregistrer_historique(
+            connection=connection,
+            type_objet="TOUR_EAU",
+            objet_id=nouveau_tour_id,
+            action="CREATION_PAR_REPORT",
+            ancienne_valeur=None,
+            nouvelle_valeur=nouveau,
+            motif=motif,
+        )
+
         connection.commit()
 
         return {
-            "ancien_tour_id": tour_id,
-            "ancien_numero_recu": ancien_row[1],
-            "nouveau_tour_id": nouveau_tour_id,
-            "nouveau_numero_recu": nouveau_numero_recu,
+            "ancien_tour_id":
+                tour_id,
+
+            "ancien_numero_recu":
+                ancien_row[1],
+
+            "nouveau_tour_id":
+                nouveau_tour_id,
+
+            "nouveau_numero_recu":
+                nouveau_numero_recu,
+
             "nouveau_numero_recu_formate":
                 f"{nouveau_numero_recu:06d}",
         }
 
+    except sqlite3.IntegrityError as error:
+        connection.rollback()
+
+        raise ValueError(
+            "Impossible d'enregistrer "
+            "le report du tour d'eau."
+        ) from error
+
     except Exception:
         connection.rollback()
         raise
+
+    finally:
+        connection.close()
+
+def lister_tours_pour_jour(
+    date_jour,
+):
+    if isinstance(
+        date_jour,
+        str,
+    ):
+        try:
+            jour = datetime.strptime(
+                date_jour,
+                "%Y-%m-%d",
+            )
+        except ValueError as error:
+            raise ValueError(
+                "La date doit respecter "
+                "le format AAAA-MM-JJ."
+            ) from error
+
+    elif isinstance(
+        date_jour,
+        datetime,
+    ):
+        jour = date_jour
+
+    else:
+        raise ValueError(
+            "Date du planning invalide."
+        )
+
+    debut_jour = jour.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    fin_jour = (
+        debut_jour
+        + timedelta(days=1)
+    )
+
+    connection = get_connection()
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                t.id,
+                t.numero_recu,
+
+                t.ressource_id,
+                t.ressource_nom_snapshot,
+
+                t.parcelle_id,
+                t.numero_lot_snapshot,
+                t.nom_lot_snapshot,
+                t.superficie_m2_snapshot,
+
+                t.nom_agriculteur_snapshot,
+                t.prenom_agriculteur_snapshot,
+                t.cin_snapshot,
+
+                t.date_heure_debut,
+                t.date_heure_fin,
+                t.duree_minutes,
+
+                t.statut,
+                t.remarque
+
+            FROM tours_eau t
+
+            WHERE t.date_heure_debut < ?
+              AND t.date_heure_fin > ?
+              AND t.statut != 'ANNULE'
+              AND t.statut != 'REPORTE'
+
+            ORDER BY
+                t.ressource_id,
+                t.date_heure_debut
+            """,
+            (
+                fin_jour.strftime(
+                    FORMAT_DB
+                ),
+                debut_jour.strftime(
+                    FORMAT_DB
+                ),
+            ),
+        ).fetchall()
+
+        resultat = []
+
+        for row in rows:
+            resultat.append(
+                {
+                    "id":
+                        row[0],
+
+                    "numero_recu":
+                        row[1],
+
+                    "numero_recu_formate":
+                        f"{row[1]:06d}",
+
+                    "ressource_id":
+                        row[2],
+
+                    "ressource_nom":
+                        row[3],
+
+                    "parcelle_id":
+                        row[4],
+
+                    "numero_lot":
+                        row[5],
+
+                    "nom_lot":
+                        row[6],
+
+                    "superficie_m2":
+                        row[7],
+
+                    "nom":
+                        row[8],
+
+                    "prenom":
+                        row[9],
+
+                    "cin":
+                        row[10],
+
+                    "date_heure_debut":
+                        row[11],
+
+                    "date_heure_fin":
+                        row[12],
+
+                    "duree_minutes":
+                        row[13],
+
+                    "statut":
+                        row[14],
+
+                    "remarque":
+                        row[15],
+                }
+            )
+
+        return resultat
 
     finally:
         connection.close()

@@ -376,6 +376,25 @@ MIGRATIONS = [
             );
         """
     ),
+            (
+        7,
+        """
+        UPDATE parcelles
+        SET nom_lot = 'Lot ' || numero_lot
+        WHERE nom_lot IS NULL
+           OR trim(nom_lot) = '';
+
+
+        UPDATE tours_eau
+        SET nom_lot_snapshot = (
+            SELECT p.nom_lot
+            FROM parcelles p
+            WHERE p.id = tours_eau.parcelle_id
+        )
+        WHERE nom_lot_snapshot IS NULL
+           OR trim(nom_lot_snapshot) = '';
+        """
+    ),
 ]
 
 def create_migrations_table(connection):
@@ -445,6 +464,52 @@ def preparer_migration_6(connection):
         )
 
     connection.commit()
+def preparer_migration_7(connection):
+    # ---------------------------------
+    # Table parcelles
+    # ---------------------------------
+
+    colonnes_parcelles = {
+        row[1]
+        for row in connection.execute(
+            "PRAGMA table_info(parcelles)"
+        ).fetchall()
+    }
+
+    if (
+        "nom_lot"
+        not in colonnes_parcelles
+    ):
+        connection.execute(
+            """
+            ALTER TABLE parcelles
+            ADD COLUMN nom_lot TEXT
+            """
+        )
+
+    # ---------------------------------
+    # Table tours_eau
+    # ---------------------------------
+
+    colonnes_tours = {
+        row[1]
+        for row in connection.execute(
+            "PRAGMA table_info(tours_eau)"
+        ).fetchall()
+    }
+
+    if (
+        "nom_lot_snapshot"
+        not in colonnes_tours
+    ):
+        connection.execute(
+            """
+            ALTER TABLE tours_eau
+            ADD COLUMN nom_lot_snapshot TEXT
+            """
+        )
+
+    connection.commit()
 
 def run_migrations():
     connection = get_connection()
@@ -467,6 +532,10 @@ def run_migrations():
                 )
             if version == 6:
                 preparer_migration_6(
+                    connection
+                )
+            if version == 7:
+                preparer_migration_7(
                     connection
                 )
             connection.executescript(sql)

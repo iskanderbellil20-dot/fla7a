@@ -108,29 +108,45 @@ def creer_agriculteur(
     parcelles,
     remarque=None,
 ):
-    nom, prenom, cin, telephone = valider_agriculteur(
-        nom,
-        prenom,
-        cin,
-        telephone,
+    nom, prenom, cin, telephone = (
+        valider_agriculteur(
+            nom,
+            prenom,
+            cin,
+            telephone,
+        )
     )
 
-    valider_parcelles(parcelles)
+    valider_parcelles(
+        parcelles
+    )
 
     connection = get_connection()
 
     try:
+        # ---------------------------------
+        # Vérifier toutes les ressources
+        # avant de créer quoi que ce soit.
+        # ---------------------------------
+
         toutes_ressources = []
 
         for parcelle in parcelles:
             toutes_ressources.extend(
-                parcelle.get("ressources_ids", [])
+                parcelle.get(
+                    "ressources_ids",
+                    [],
+                )
             )
 
         verifier_ressources(
             connection,
             toutes_ressources,
         )
+
+        # ---------------------------------
+        # Créer l'agriculteur
+        # ---------------------------------
 
         cursor = connection.execute(
             """
@@ -152,46 +168,118 @@ def creer_agriculteur(
             ),
         )
 
-        agriculteur_id = cursor.lastrowid
+        agriculteur_id = (
+            cursor.lastrowid
+        )
+
+        # ---------------------------------
+        # Créer ses parcelles
+        # ---------------------------------
 
         for parcelle in parcelles:
+            # IMPORTANT :
+            # numero_lot est défini AVANT
+            # de construire le nom par défaut.
             numero_lot = str(
-                parcelle["numero_lot"]
+                parcelle.get(
+                    "numero_lot",
+                    ""
+                )
             ).strip()
 
-            superficie = float(
-                parcelle["superficie_m2"]
+            if not numero_lot:
+                raise ValueError(
+                    "Le numéro du lot "
+                    "est obligatoire."
+                )
+
+            nom_lot = str(
+                parcelle.get(
+                    "nom_lot",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            # Compatibilité avec les anciens
+            # appels ne fournissant pas nom_lot.
+            if not nom_lot:
+                nom_lot = (
+                    f"Lot {numero_lot}"
+                )
+
+            try:
+                superficie = float(
+                    parcelle.get(
+                        "superficie_m2",
+                        0,
+                    )
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                raise ValueError(
+                    f"La superficie du lot "
+                    f"{numero_lot} est invalide."
+                )
+
+            if superficie <= 0:
+                raise ValueError(
+                    f"La superficie du lot "
+                    f"{numero_lot} doit être "
+                    "supérieure à 0."
+                )
+
+            ressources_ids = list(
+                set(
+                    parcelle.get(
+                        "ressources_ids",
+                        [],
+                    )
+                )
             )
 
-            remarque_parcelle = parcelle.get(
-                "remarque"
+            if not ressources_ids:
+                raise ValueError(
+                    f"Le lot {numero_lot} "
+                    "doit avoir au moins "
+                    "une ressource d'eau."
+                )
+
+            remarque_parcelle = (
+                parcelle.get(
+                    "remarque"
+                )
             )
 
             cursor = connection.execute(
                 """
                 INSERT INTO parcelles (
                     agriculteur_id,
+                    nom_lot,
                     numero_lot,
                     superficie_m2,
                     remarque
                 )
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     agriculteur_id,
+                    nom_lot,
                     numero_lot,
                     superficie,
                     remarque_parcelle,
                 ),
             )
 
-            parcelle_id = cursor.lastrowid
-
-            ressources_ids = set(
-                parcelle.get("ressources_ids", [])
+            parcelle_id = (
+                cursor.lastrowid
             )
 
-            for ressource_id in ressources_ids:
+            for ressource_id in (
+                ressources_ids
+            ):
                 connection.execute(
                     """
                     INSERT INTO parcelles_ressources (
@@ -213,16 +301,29 @@ def creer_agriculteur(
     except sqlite3.IntegrityError as error:
         connection.rollback()
 
-        message = str(error)
+        message = str(
+            error
+        )
 
-        if "agriculteurs.cin" in message:
+        if (
+            "agriculteurs.cin"
+            in message
+        ):
             raise ValueError(
-                "Un agriculteur avec ce CIN existe déjà."
+                "Un agriculteur avec ce CIN "
+                "existe déjà."
             ) from error
 
-        if "parcelles.numero_lot" in message:
+        if (
+            "parcelles.numero_lot"
+            in message
+            or
+            "idx_parcelle_lot_actif_unique"
+            in message
+        ):
             raise ValueError(
-                "Une parcelle active avec ce numéro de lot existe déjà."
+                "Une parcelle active avec "
+                "ce numéro de lot existe déjà."
             ) from error
 
         raise
@@ -233,7 +334,6 @@ def creer_agriculteur(
 
     finally:
         connection.close()
-
 
 def lister_agriculteurs(inclure_archives=False):
     connection = get_connection()
@@ -2026,6 +2126,89 @@ def diviser_parcelle(
     except Exception:
         connection.rollback()
         raise
+
+    finally:
+        connection.close()
+
+def obtenir_parcelle_avec_ressources(
+    parcelle_id,
+):
+    connection = get_connection()
+
+    try:
+        parcelle = connection.execute(
+            """
+            SELECT
+                p.id,
+                p.agriculteur_id,
+                p.numero_lot,
+                p.superficie_m2,
+                p.remarque,
+                p.actif,
+
+                a.nom,
+                a.prenom,
+                a.cin,
+                a.actif
+
+            FROM parcelles p
+
+            INNER JOIN agriculteurs a
+                ON a.id = p.agriculteur_id
+
+            WHERE p.id = ?
+            """,
+            (parcelle_id,),
+        ).fetchone()
+
+        if parcelle is None:
+            return None
+
+        ressources = connection.execute(
+            """
+            SELECT
+                r.id,
+                r.nom,
+                r.etat,
+                r.actif
+
+            FROM ressources_eau r
+
+            INNER JOIN parcelles_ressources pr
+                ON pr.ressource_id = r.id
+
+            WHERE pr.parcelle_id = ?
+
+            ORDER BY r.nom
+            """,
+            (parcelle_id,),
+        ).fetchall()
+
+        return {
+            "id": parcelle[0],
+            "agriculteur_id":
+                parcelle[1],
+            "numero_lot":
+                parcelle[2],
+            "superficie_m2":
+                parcelle[3],
+            "remarque":
+                parcelle[4],
+            "actif":
+                parcelle[5],
+
+            "nom":
+                parcelle[6],
+            "prenom":
+                parcelle[7],
+            "cin":
+                parcelle[8],
+            "agriculteur_actif":
+                parcelle[9],
+
+            "ressources":
+                ressources,
+        }
 
     finally:
         connection.close()

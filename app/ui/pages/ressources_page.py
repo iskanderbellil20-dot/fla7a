@@ -13,7 +13,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from app.ui.dialogs.indisponibilite_dialog import (
+    IndisponibiliteDialog,
+)
 
+from app.ui.dialogs.tours_impactes_dialog import (
+    ToursImpactesDialog,
+)
 from app.services.ressource_service import (
     archiver_ressource,
     lister_ressources,
@@ -198,10 +204,31 @@ class RessourcesPage(QWidget):
             self.charger_ressources
         )
 
-        actions.addWidget(modifier_button)
-        actions.addWidget(self.archive_button)
-        actions.addWidget(actualiser_button)
+        indisponibilite_button = QPushButton(
+            "Déclarer panne / maintenance"
+        )
+
+        indisponibilite_button.clicked.connect(
+            self.declarer_indisponibilite
+        )
+        actions.addWidget(
+            modifier_button
+        )
+
+        actions.addWidget(
+            indisponibilite_button
+        )
+
+        actions.addWidget(
+            self.archive_button
+        )
+
+        actions.addWidget(
+            actualiser_button
+        )
+
         actions.addStretch()
+
 
         layout.addLayout(actions)
 
@@ -453,6 +480,92 @@ class RessourcesPage(QWidget):
                 "Erreur",
                 str(error),
             )
+
+            
+    def declarer_indisponibilite(self):
+        ressource_id = (
+            self.obtenir_id_selectionne()
+        )
+
+        if ressource_id is None:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez une ressource.",
+            )
+            return
+
+        ressource = obtenir_ressource(
+            ressource_id
+        )
+
+        if ressource is None:
+            QMessageBox.warning(
+                self,
+                "Erreur",
+                "Ressource introuvable.",
+            )
+            return
+
+        if ressource[5] == 0:
+            QMessageBox.information(
+                self,
+                "Ressource archivée",
+                (
+                    "Une ressource archivée "
+                    "ne peut pas recevoir "
+                    "une indisponibilité."
+                ),
+            )
+            return
+
+        dialog = IndisponibiliteDialog(
+            ressource=ressource,
+            parent=self,
+        )
+
+        if not dialog.exec():
+            return
+
+        self.charger_ressources()
+
+        tours = dialog.tours_impactes
+
+        if not tours:
+            QMessageBox.information(
+                self,
+                "Indisponibilité enregistrée",
+                (
+                    "L'indisponibilité a été "
+                    "enregistrée.\n\n"
+                    "Aucun tour d'eau planifié "
+                    "n'est concerné."
+                ),
+            )
+
+            return
+
+        QMessageBox.warning(
+            self,
+            "Tours concernés",
+            (
+                f"{len(tours)} tour(s) d'eau "
+                "sont concernés par "
+                "cette indisponibilité.\n\n"
+                "Ils ne seront pas modifiés "
+                "automatiquement."
+            ),
+        )
+
+        impactes_dialog = ToursImpactesDialog(
+            tours=tours,
+            parent=self,
+        )
+
+        impactes_dialog.exec()
+
+        self.charger_ressources()
+
 
     def mettre_a_jour_actions(self):
         ressource_id = (

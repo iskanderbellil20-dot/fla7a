@@ -40,7 +40,8 @@ class NouveauTourPage(QWidget):
 
         self.agriculteur_selectionne = None
         self.parcelle_selectionnee = None
-
+        self.ressource_planning_id = None
+        self.ressource_planning_nom = None
         self.creer_interface()
         self.initialiser_formulaire()
 
@@ -210,14 +211,28 @@ class NouveauTourPage(QWidget):
         self.heure_input.setDisplayFormat(
             "HH:mm"
         )
+        self.heure_input.setTime(
+            QTime.currentTime()
+        )
 
         self.duree_heures = QSpinBox()
         self.duree_heures.setRange(0, 240)
         self.duree_heures.setSuffix(" h")
 
         self.duree_minutes = QSpinBox()
-        self.duree_minutes.setRange(0, 59)
-        self.duree_minutes.setSuffix(" min")
+
+        self.duree_minutes.setRange(
+            0,
+            30,
+        )
+
+        self.duree_minutes.setSingleStep(
+            30
+        )
+
+        self.duree_minutes.setSuffix(
+            " min"
+        )
 
         duree_layout = QHBoxLayout()
 
@@ -361,6 +376,52 @@ class NouveauTourPage(QWidget):
         )
 
         self.calculer_fin()
+
+    def preparer_depuis_planning(
+        self,
+        date_selectionnee,
+        heure,
+        minute,
+        ressource_id,
+        ressource_nom,
+    ):
+        # Réinitialiser l'ancien formulaire.
+        self.reinitialiser_apres_creation()
+
+        # Date venant du planning.
+        self.date_input.setDate(
+            date_selectionnee
+        )
+
+        # Heure correspondant au créneau.
+        self.heure_input.setTime(
+            QTime(
+                heure,
+                minute,
+            )
+        )
+
+        # Garder la ressource demandée
+        # en mémoire.
+        self.ressource_planning_id = (
+            ressource_id
+        )
+
+        self.ressource_planning_nom = (
+            ressource_nom
+        )
+
+        self.agriculteur_info.setText(
+            (
+                "Création depuis le planning — "
+                f"{ressource_nom} — "
+                f"{heure:02d}:{minute:02d}\n"
+                "Recherchez maintenant "
+                "l'agriculteur."
+            )
+        )
+
+        self.recherche_input.setFocus()
 
     def rechercher(self):
         terme = (
@@ -596,6 +657,8 @@ class NouveauTourPage(QWidget):
 
         self.ressource_combo.clear()
 
+        index_ressource_planning = -1
+
         for ressource in parcelle[
             "ressources"
         ]:
@@ -610,12 +673,28 @@ class NouveauTourPage(QWidget):
             texte = nom
 
             if etat != "DISPONIBLE":
-                texte += f" — {etat}"
+                texte += (
+                    f" — {etat}"
+                )
 
             self.ressource_combo.addItem(
                 texte,
                 ressource_id,
             )
+
+            # Si on vient du planning,
+            # rechercher la ressource demandée.
+            if (
+                self.ressource_planning_id
+                is not None
+                and
+                ressource_id
+                == self.ressource_planning_id
+            ):
+                index_ressource_planning = (
+                    self.ressource_combo.count()
+                    - 1
+                )
 
         ressources_disponibles = (
             self.ressource_combo.count()
@@ -626,9 +705,47 @@ class NouveauTourPage(QWidget):
             ressources_disponibles
         )
 
-        self.valider_button.setEnabled(
-            ressources_disponibles
-        )
+        # ---------------------------------
+        # Création venant du planning
+        # ---------------------------------
+
+        if (
+            self.ressource_planning_id
+            is not None
+        ):
+            if (
+                index_ressource_planning
+                >= 0
+            ):
+                self.ressource_combo.setCurrentIndex(
+                    index_ressource_planning
+                )
+
+                self.valider_button.setEnabled(
+                    True
+                )
+
+            else:
+                self.valider_button.setEnabled(
+                    False
+                )
+
+                QMessageBox.warning(
+                    self,
+                    "Ressource non autorisée",
+                    (
+                        f"Cette parcelle ne peut pas "
+                        f"être irriguée par "
+                        f"{self.ressource_planning_nom}.\n\n"
+                        "Choisissez une autre parcelle "
+                        "ou revenez au planning."
+                    ),
+                )
+
+        else:
+            self.valider_button.setEnabled(
+                ressources_disponibles
+            )
 
     def obtenir_debut_python(self):
         date = self.date_input.date()
@@ -796,5 +913,6 @@ class NouveauTourPage(QWidget):
         self.valider_button.setEnabled(
             False
         )
-
+        self.ressource_planning_id = None
+        self.ressource_planning_nom = None
         self.recherche_input.setFocus()

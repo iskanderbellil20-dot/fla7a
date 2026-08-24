@@ -16,7 +16,9 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
 )
-
+from app.ui.dialogs.operation_parcelle_dialog import (
+    OperationParcelleDialog,
+)
 from app.services.agriculteur_service import (
     archiver_parcelle,
     creer_agriculteur,
@@ -164,6 +166,22 @@ class AgriculteurDialog(QDialog):
         self.archive_parcelle_button = QPushButton(
             "Archiver la parcelle"
         )
+
+        self.transferer_button = QPushButton(
+            "Transférer"
+        )
+
+        self.transferer_button.clicked.connect(
+            self.transferer_parcelle_selectionnee
+        )
+
+        self.diviser_button = QPushButton(
+            "Diviser / céder"
+        )
+
+        self.diviser_button.clicked.connect(
+            self.diviser_parcelle_selectionnee
+        )
         self.transferer_button = QPushButton(
             "Transférer"
         )
@@ -201,7 +219,7 @@ class AgriculteurDialog(QDialog):
         barre_parcelles.addWidget(
             self.diviser_button
         )
-
+        
         barre_parcelles.addStretch()
 
         parcelles_layout.addLayout(
@@ -910,9 +928,20 @@ class AgriculteurDialog(QDialog):
                 False
             )
 
-            return
+        elif parcelle.get("actif", 1) == 1:
+            self.archive_parcelle_button.setText(
+                "Archiver la parcelle"
+            )
 
-        if parcelle.get("actif", 1) == 0:
+            self.transferer_button.setEnabled(
+                True
+            )
+
+            self.diviser_button.setEnabled(
+                True
+            )
+
+        else:
             self.archive_parcelle_button.setText(
                 "Restaurer la parcelle"
             )
@@ -924,26 +953,6 @@ class AgriculteurDialog(QDialog):
             self.diviser_button.setEnabled(
                 False
             )
-
-            return
-
-        self.archive_parcelle_button.setText(
-            "Archiver la parcelle"
-        )
-
-        parcelle_modifiee = (
-            parcelle["id"]
-            in self.parcelles_modifiees
-        )
-
-        self.transferer_button.setEnabled(
-            not parcelle_modifiee
-        )
-
-        self.diviser_button.setEnabled(
-            not parcelle_modifiee
-        )
-
     def obtenir_parcelle_selectionnee(self):
         ligne = self.table_parcelles.currentRow()
 
@@ -1105,6 +1114,134 @@ class AgriculteurDialog(QDialog):
 
             self.actualiser_parcelles()
 
+
+    def obtenir_parcelle_selectionnee(self):
+        ligne = self.table_parcelles.currentRow()
+
+        if ligne < 0:
+            return None
+
+        item = self.table_parcelles.item(
+            ligne,
+            0,
+        )
+
+        if item is None:
+            return None
+
+        return item.data(
+            Qt.ItemDataRole.UserRole
+        )
+    
+    def transferer_parcelle_selectionnee(self):
+        parcelle = (
+            self.obtenir_parcelle_selectionnee()
+        )
+
+        if parcelle is None:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez une parcelle.",
+            )
+            return
+
+        if parcelle.get("nouvelle"):
+            QMessageBox.information(
+                self,
+                "Parcelle non enregistrée",
+                (
+                    "Enregistrez d'abord la parcelle "
+                    "avant de la transférer."
+                ),
+            )
+            return
+
+        if parcelle.get("actif", 1) == 0:
+            QMessageBox.information(
+                self,
+                "Parcelle archivée",
+                (
+                    "Une parcelle archivée "
+                    "ne peut pas être transférée."
+                ),
+            )
+            return
+
+        dialog = OperationParcelleDialog(
+            operation="TRANSFERT",
+            parcelle=parcelle,
+            parent=self,
+        )
+
+        if dialog.exec():
+            self.agriculteur = (
+                obtenir_agriculteur(
+                    self.agriculteur_id
+                )
+            )
+
+            self.parcelles_modifiees.pop(
+                parcelle["id"],
+                None,
+            )
+
+            self.actualiser_parcelles()
+            
+    def diviser_parcelle_selectionnee(self):
+        parcelle = (
+            self.obtenir_parcelle_selectionnee()
+        )
+
+        if parcelle is None:
+            QMessageBox.information(
+                self,
+                "Sélection",
+                "Sélectionnez une parcelle.",
+            )
+            return
+
+        if parcelle.get("nouvelle"):
+            QMessageBox.information(
+                self,
+                "Parcelle non enregistrée",
+                (
+                    "Enregistrez d'abord la parcelle "
+                    "avant de la diviser."
+                ),
+            )
+            return
+
+        if parcelle.get("actif", 1) == 0:
+            QMessageBox.information(
+                self,
+                "Parcelle archivée",
+                (
+                    "Une parcelle archivée "
+                    "ne peut pas être divisée."
+                ),
+            )
+            return
+
+        dialog = OperationParcelleDialog(
+            operation="DIVISION",
+            parcelle=parcelle,
+            parent=self,
+        )
+
+        if dialog.exec():
+            self.agriculteur = (
+                obtenir_agriculteur(
+                    self.agriculteur_id
+                )
+            )
+
+            self.parcelles_modifiees.pop(
+                parcelle["id"],
+                None,
+            )
+
+            self.actualiser_parcelles()
 
 def lister_ressources_pour_noms(
     ressources_ids,

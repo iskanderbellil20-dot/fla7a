@@ -54,6 +54,9 @@ class MainWindow(QMainWindow):
         )
         self.ressources_page = RessourcesPage()
         self.planning_page = PlanningPage()
+        self.planning_page.nouveau_tour_demande.connect(
+            self.ouvrir_nouveau_tour_depuis_planning
+        )
         self.historique_page = HistoriquePage()
         self.sauvegarde_page = SauvegardePage()
 
@@ -94,6 +97,39 @@ class MainWindow(QMainWindow):
         )
 
         self.pages.setCurrentIndex(0)
+
+    def ouvrir_nouveau_tour_depuis_planning(
+        self,
+        date_selectionnee,
+        heure,
+        minute,
+        ressource_id,
+        ressource_nom,
+    ):
+        self.nouveau_tour_page.preparer_depuis_planning(
+            date_selectionnee=(
+                date_selectionnee
+            ),
+            heure=heure,
+            minute=minute,
+            ressource_id=ressource_id,
+            ressource_nom=ressource_nom,
+        )
+
+        # Nouveau tour est la page index 1.
+        self.pages.setCurrentIndex(
+            1
+        )
+
+        # Mettre également le bouton
+        # "Nouveau tour d'eau" en surbrillance.
+        if (
+            len(self.navigation_buttons)
+            > 1
+        ):
+            self.navigation_buttons[
+                1
+            ].setChecked(True)
 
     def creer_sidebar(self):
         sidebar = QWidget()

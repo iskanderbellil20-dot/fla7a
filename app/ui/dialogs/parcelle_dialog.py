@@ -49,7 +49,11 @@ class ParcelleDialog(QDialog):
         layout = QVBoxLayout(self)
 
         formulaire = QFormLayout()
+        self.nom_lot_input = QLineEdit()
 
+        self.nom_lot_input.setPlaceholderText(
+            "Exemple : Olivier Nord"
+        )
         self.numero_lot_input = QLineEdit()
         self.numero_lot_input.setPlaceholderText(
             "Exemple : 14"
@@ -62,7 +66,10 @@ class ParcelleDialog(QDialog):
 
         self.remarque_input = QTextEdit()
         self.remarque_input.setMaximumHeight(80)
-
+        formulaire.addRow(
+            "Nom du lot * :",
+            self.nom_lot_input,
+        )
         formulaire.addRow(
             "Numéro du lot * :",
             self.numero_lot_input,
@@ -155,8 +162,19 @@ class ParcelleDialog(QDialog):
         layout.addWidget(self.buttons)
 
     def charger_donnees(self):
+
+
         if self.parcelle is None:
             return
+        self.nom_lot_input.setText(
+            str(
+                self.parcelle.get(
+                    "nom_lot",
+                    "",
+                )
+                or ""
+            )
+        )
 
         self.numero_lot_input.setText(
             str(
@@ -212,6 +230,12 @@ class ParcelleDialog(QDialog):
             )
 
     def valider(self):
+        nom_lot = (
+            self.nom_lot_input
+            .text()
+            .strip()
+        )
+
         numero_lot = (
             self.numero_lot_input
             .text()
@@ -224,6 +248,14 @@ class ParcelleDialog(QDialog):
             .strip()
             .replace(",", ".")
         )
+
+        if not nom_lot:
+            QMessageBox.warning(
+                self,
+                "Champ obligatoire",
+                "Le nom du lot est obligatoire.",
+            )
+            return
 
         if not numero_lot:
             QMessageBox.warning(
@@ -249,7 +281,10 @@ class ParcelleDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Superficie invalide",
-                "La superficie doit être supérieure à 0.",
+                (
+                    "La superficie doit être "
+                    "supérieure à 0."
+                ),
             )
             return
 
@@ -264,7 +299,10 @@ class ParcelleDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Ressource obligatoire",
-                "Sélectionnez au moins une ressource d'eau.",
+                (
+                    "Sélectionnez au moins "
+                    "une ressource d'eau."
+                ),
             )
             return
 
@@ -274,17 +312,31 @@ class ParcelleDialog(QDialog):
                 if self.parcelle
                 else None
             ),
-            "numero_lot": numero_lot,
-            "superficie_m2": superficie,
-            "ressources_ids": ressources_ids,
+
+            "nom_lot":
+                nom_lot,
+
+            "numero_lot":
+                numero_lot,
+
+            "superficie_m2":
+                superficie,
+
+            "ressources_ids":
+                ressources_ids,
+
             "remarque": (
                 self.remarque_input
                 .toPlainText()
                 .strip()
                 or None
             ),
+
             "actif": (
-                self.parcelle.get("actif", 1)
+                self.parcelle.get(
+                    "actif",
+                    1,
+                )
                 if self.parcelle
                 else 1
             ),
